@@ -5,6 +5,7 @@ import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { BookOpen, FileText, Youtube, CheckCircle, ChevronLeft, ChevronRight, PlayCircle, FileUp, ListChecks } from 'lucide-react';
 import { toast } from 'sonner';
+import 'react-quill-new/dist/quill.snow.css';
 
 interface ModulItem {
   id: string;
@@ -18,6 +19,7 @@ interface ModulItem {
 
 interface KuisSoal {
   pertanyaan: string;
+  gambar?: string; // Base64 image
   opsi_a: string;
   opsi_b: string;
   opsi_c: string;
@@ -305,9 +307,10 @@ export default function ModulSiswaDetail() {
       case 'MATERI':
         return (
           <div className="prose dark:prose-invert max-w-none">
-            <div className="whitespace-pre-wrap text-gray-700 dark:text-gray-300">
-              {currentItem.konten}
-            </div>
+            <div 
+              className="text-gray-700 dark:text-gray-300 ql-editor !p-0"
+              dangerouslySetInnerHTML={{ __html: currentItem.konten }}
+            />
           </div>
         );
       case 'PDF':
@@ -390,10 +393,28 @@ export default function ModulSiswaDetail() {
               <div className="space-y-6">
                 {questions.map((q, qIndex) => (
                   <div key={qIndex} className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                    <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-                      {qIndex + 1}. {q.pertanyaan}
-                    </h4>
-                    <div className="space-y-3">
+                    <div className="flex flex-col space-y-4 mb-6">
+                      <div className="flex items-start space-x-3">
+                        <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-full font-bold">
+                          {qIndex + 1}
+                        </span>
+                        <div 
+                          className="text-lg font-medium text-gray-900 dark:text-white ql-editor !p-0"
+                          dangerouslySetInnerHTML={{ __html: q.pertanyaan }}
+                        />
+                      </div>
+                      
+                      {q.gambar && (
+                        <div className="ml-11">
+                          <img 
+                            src={q.gambar} 
+                            alt={`Gambar Soal ${qIndex + 1}`} 
+                            className="max-h-64 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-3 ml-11">
                       {['A', 'B', 'C', 'D'].map((opt) => {
                         const optionKey = `opsi_${opt.toLowerCase()}` as keyof KuisSoal;
                         return (

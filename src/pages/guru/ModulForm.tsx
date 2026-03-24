@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, where, getDocs, doc, writeBatch, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Save, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, GripVertical, ArrowUp, ArrowDown, Image as ImageIcon, X } from 'lucide-react';
 import { toast } from 'sonner';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
 
 interface Kelas {
   id: string;
@@ -29,6 +31,7 @@ interface ModulItem {
 
 interface KuisSoal {
   pertanyaan: string;
+  gambar?: string; // Base64 image
   opsi_a: string;
   opsi_b: string;
   opsi_c: string;
@@ -42,6 +45,7 @@ export default function ModulForm() {
   const isEditing = !!id;
   const { user } = useAuth();
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(isEditing);
@@ -61,6 +65,23 @@ export default function ModulForm() {
   // Data State
   const [kelasList, setKelasList] = useState<Kelas[]>([]);
   const [siswaList, setSiswaList] = useState<Siswa[]>([]);
+
+  const quillModules = {
+    toolbar: [
+      [{ 'header': [1, 2, 3, false] }],
+      ['bold', 'italic', 'underline', 'strike'],
+      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+      ['link', 'blockquote', 'code-block'],
+      ['clean']
+    ],
+  };
+
+  const quillFormats = [
+    'header',
+    'bold', 'italic', 'underline', 'strike',
+    'list', 'bullet',
+    'link', 'blockquote', 'code-block'
+  ];
 
   useEffect(() => {
     const fetchData = async () => {
@@ -493,15 +514,19 @@ export default function ModulForm() {
 
               {/* Dynamic Content Field based on Type */}
               {item.tipe_item === 'MATERI' && (
-                <div>
+                <div className="space-y-2">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Isi Materi</label>
-                  <textarea
-                    value={item.konten}
-                    onChange={(e) => handleItemChange(index, 'konten', e.target.value)}
-                    rows={6}
-                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                    placeholder="Tuliskan materi pembelajaran di sini..."
-                  />
+                  <div className="bg-white dark:bg-gray-700 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
+                    <ReactQuill
+                      theme="snow"
+                      value={item.konten}
+                      onChange={(content) => handleItemChange(index, 'konten', content)}
+                      modules={quillModules}
+                      formats={quillFormats}
+                      placeholder="Tuliskan materi pembelajaran di sini..."
+                      className="min-h-[200px]"
+                    />
+                  </div>
                 </div>
               )}
 
@@ -573,59 +598,112 @@ export default function ModulForm() {
                       handleItemChange(index, 'konten', JSON.stringify(newQuestions));
                     };
 
+                    const handleQuestionImageUpload = (qIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 500000) {
+                          toast.error('Ukuran gambar maksimal 500KB');
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          updateQuestion(qIndex, 'gambar', reader.result as string);
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    };
+
                     return (
                       <div className="space-y-6">
                         {questions.map((q, qIndex) => (
                           <div key={qIndex} className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg border border-gray-200 dark:border-gray-700 relative">
                             <button 
                               onClick={() => removeQuestion(qIndex)}
-                              className="absolute top-4 right-4 text-red-500 hover:text-red-700"
+                              className="absolute top-4 right-4 text-red-500 hover:text-red-700 z-10"
                               title="Hapus Soal"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
                             <div className="space-y-4 pr-8">
                               <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Soal {qIndex + 1}</label>
-                                <textarea
-                                  value={q.pertanyaan}
-                                  onChange={(e) => updateQuestion(qIndex, 'pertanyaan', e.target.value)}
-                                  rows={2}
-                                  className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm outline-none"
-                                  placeholder="Tulis pertanyaan..."
-                                />
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Soal {qIndex + 1}</label>
+                                <div className="bg-white dark:bg-gray-700 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 mb-3">
+                                  <ReactQuill
+                                    theme="snow"
+                                    value={q.pertanyaan}
+                                    onChange={(content) => updateQuestion(qIndex, 'pertanyaan', content)}
+                                    modules={{
+                                      toolbar: [
+                                        ['bold', 'italic', 'underline'],
+                                        [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                                        ['clean']
+                                      ]
+                                    }}
+                                    placeholder="Tulis pertanyaan..."
+                                    className="min-h-[100px]"
+                                  />
+                                </div>
+
+                                {/* Question Image */}
+                                <div className="mt-2">
+                                  <label className="block text-xs font-medium text-gray-500 mb-1">Gambar Soal (Opsional, Maks 500KB)</label>
+                                  {q.gambar ? (
+                                    <div className="relative inline-block">
+                                      <img src={q.gambar} alt="Soal" className="h-32 rounded-md border border-gray-200 dark:border-gray-700" />
+                                      <button 
+                                        onClick={() => updateQuestion(qIndex, 'gambar', '')}
+                                        className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full shadow-sm"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <label className="flex items-center space-x-2 px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors w-fit">
+                                      <ImageIcon className="w-4 h-4 text-gray-400" />
+                                      <span className="text-xs text-gray-600 dark:text-gray-300">Upload Gambar</span>
+                                      <input 
+                                        type="file" 
+                                        accept="image/png, image/jpeg" 
+                                        className="hidden" 
+                                        onChange={(e) => handleQuestionImageUpload(qIndex, e)}
+                                      />
+                                    </label>
+                                  )}
+                                </div>
                               </div>
+
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-500 mb-1">Opsi A</label>
-                                  <input type="text" value={q.opsi_a} onChange={(e) => updateQuestion(qIndex, 'opsi_a', e.target.value)} className="w-full px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm outline-none" />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-500 mb-1">Opsi B</label>
-                                  <input type="text" value={q.opsi_b} onChange={(e) => updateQuestion(qIndex, 'opsi_b', e.target.value)} className="w-full px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm outline-none" />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-500 mb-1">Opsi C</label>
-                                  <input type="text" value={q.opsi_c} onChange={(e) => updateQuestion(qIndex, 'opsi_c', e.target.value)} className="w-full px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm outline-none" />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-500 mb-1">Opsi D</label>
-                                  <input type="text" value={q.opsi_d} onChange={(e) => updateQuestion(qIndex, 'opsi_d', e.target.value)} className="w-full px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm outline-none" />
-                                </div>
+                                {['a', 'b', 'c', 'd'].map((opt) => (
+                                  <div key={opt}>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Opsi {opt}</label>
+                                    <input 
+                                      type="text" 
+                                      value={(q as any)[`opsi_${opt}`]} 
+                                      onChange={(e) => updateQuestion(qIndex, `opsi_${opt}` as any, e.target.value)} 
+                                      className="w-full px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm outline-none" 
+                                    />
+                                  </div>
+                                ))}
                               </div>
-                              <div className="flex items-center space-x-4">
+
+                              <div className="flex flex-wrap items-center gap-6 pt-2">
                                 <div>
-                                  <label className="block text-xs font-medium text-gray-500 mb-1">Kunci Jawaban</label>
-                                  <select 
-                                    value={q.kunci_jawaban} 
-                                    onChange={(e) => updateQuestion(qIndex, 'kunci_jawaban', e.target.value)}
-                                    className="px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm outline-none"
-                                  >
-                                    <option value="A">A</option>
-                                    <option value="B">B</option>
-                                    <option value="C">C</option>
-                                    <option value="D">D</option>
-                                  </select>
+                                  <label className="block text-xs font-medium text-gray-500 mb-2">Kunci Jawaban</label>
+                                  <div className="flex items-center space-x-4">
+                                    {['A', 'B', 'C', 'D'].map((key) => (
+                                      <label key={key} className="flex items-center space-x-1.5 cursor-pointer">
+                                        <input 
+                                          type="radio" 
+                                          name={`kunci_${qIndex}`}
+                                          value={key}
+                                          checked={q.kunci_jawaban === key}
+                                          onChange={() => updateQuestion(qIndex, 'kunci_jawaban', key)}
+                                          className="text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{key}</span>
+                                      </label>
+                                    ))}
+                                  </div>
                                 </div>
                                 <div>
                                   <label className="block text-xs font-medium text-gray-500 mb-1">Bobot Nilai</label>
