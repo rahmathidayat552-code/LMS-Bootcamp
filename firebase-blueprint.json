@@ -1,0 +1,115 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a user (Admin, Guru, Siswa)",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "username": { "type": "string", "description": "NISN or NIP" },
+        "nama_lengkap": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "GURU", "SISWA"] },
+        "kelas_id": { "type": "string", "description": "Only for SISWA" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "nama_lengkap", "role"]
+    },
+    "Kelas": {
+      "title": "Kelas",
+      "description": "Represents a class",
+      "type": "object",
+      "properties": {
+        "nama_kelas": { "type": "string" },
+        "tingkat": { "type": "number" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["nama_kelas", "tingkat"]
+    },
+    "Modul": {
+      "title": "Modul",
+      "description": "Represents a learning module",
+      "type": "object",
+      "properties": {
+        "guru_id": { "type": "string" },
+        "kelas_id": { "type": "string" },
+        "judul_modul": { "type": "string" },
+        "deskripsi": { "type": "string" },
+        "tipe_target": { "type": "string", "enum": ["SELURUH_KELAS", "SISWA_TERTENTU"] },
+        "target_siswa_ids": { "type": "array", "items": { "type": "string" } },
+        "is_published": { "type": "boolean" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["guru_id", "kelas_id", "judul_modul", "tipe_target", "is_published"]
+    },
+    "ModulItem": {
+      "title": "Modul Item",
+      "description": "Represents an item within a module (Materi, Kuis, Submission)",
+      "type": "object",
+      "properties": {
+        "modul_id": { "type": "string" },
+        "tipe_item": { "type": "string", "enum": ["MATERI", "KUIS", "SUBMISSION"] },
+        "judul_item": { "type": "string" },
+        "konten": { "type": "string" },
+        "urutan": { "type": "number" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["modul_id", "tipe_item", "judul_item", "urutan"]
+    },
+    "KuisSoal": {
+      "title": "Kuis Soal",
+      "description": "Represents a question in a Kuis item",
+      "type": "object",
+      "properties": {
+        "modul_item_id": { "type": "string" },
+        "pertanyaan": { "type": "string" },
+        "opsi_a": { "type": "string" },
+        "opsi_b": { "type": "string" },
+        "opsi_c": { "type": "string" },
+        "opsi_d": { "type": "string" },
+        "kunci_jawaban": { "type": "string", "enum": ["A", "B", "C", "D"] },
+        "bobot_nilai": { "type": "number" }
+      },
+      "required": ["modul_item_id", "pertanyaan", "opsi_a", "opsi_b", "opsi_c", "opsi_d", "kunci_jawaban", "bobot_nilai"]
+    },
+    "ProgresSiswa": {
+      "title": "Progres Siswa",
+      "description": "Represents a student's progress on a module item",
+      "type": "object",
+      "properties": {
+        "siswa_id": { "type": "string" },
+        "modul_item_id": { "type": "string" },
+        "status_selesai": { "type": "boolean" },
+        "nilai": { "type": "number" },
+        "file_submission": { "type": "string" },
+        "waktu_selesai": { "type": "string", "format": "date-time" }
+      },
+      "required": ["siswa_id", "modul_item_id", "status_selesai"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores user profiles"
+    },
+    "kelas/{kelasId}": {
+      "schema": { "$ref": "#/entities/Kelas" },
+      "description": "Stores classes"
+    },
+    "moduls/{modulId}": {
+      "schema": { "$ref": "#/entities/Modul" },
+      "description": "Stores learning modules"
+    },
+    "modul_items/{itemId}": {
+      "schema": { "$ref": "#/entities/ModulItem" },
+      "description": "Stores items within modules"
+    },
+    "kuis_soal/{soalId}": {
+      "schema": { "$ref": "#/entities/KuisSoal" },
+      "description": "Stores questions for quizzes"
+    },
+    "progres_siswa/{progresId}": {
+      "schema": { "$ref": "#/entities/ProgresSiswa" },
+      "description": "Stores student progress"
+    }
+  }
+}

@@ -1,0 +1,216 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (from Firebase Auth)
+    // Fields:
+    //   - email: string (required)
+    //   - username: string (optional, NISN/NIP)
+    //   - nama_lengkap: string (required)
+    //   - role: string (required, 'ADMIN', 'GURU', 'SISWA')
+    //   - kelas_id: string (optional, for SISWA)
+    //   - created_at: string (optional)
+    //
+    // Collection: kelas
+    // Document ID: auto
+    // Fields:
+    //   - nama_kelas: string (required)
+    //   - tingkat: number (required)
+    //   - created_at: string (optional)
+    //
+    // Collection: moduls
+    // Document ID: auto
+    // Fields:
+    //   - guru_id: string (required)
+    //   - kelas_id: string (required)
+    //   - judul_modul: string (required)
+    //   - deskripsi: string (optional)
+    //   - tipe_target: string (required, 'SELURUH_KELAS', 'SISWA_TERTENTU')
+    //   - target_siswa_ids: list (optional)
+    //   - is_published: boolean (required)
+    //   - created_at: string (optional)
+    //
+    // Collection: modul_items
+    // Document ID: auto
+    // Fields:
+    //   - modul_id: string (required)
+    //   - tipe_item: string (required, 'MATERI', 'KUIS', 'SUBMISSION')
+    //   - judul_item: string (required)
+    //   - konten: string (optional)
+    //   - urutan: number (required)
+    //   - created_at: string (optional)
+    //
+    // Collection: kuis_soal
+    // Document ID: auto
+    // Fields:
+    //   - modul_item_id: string (required)
+    //   - pertanyaan: string (required)
+    //   - opsi_a: string (required)
+    //   - opsi_b: string (required)
+    //   - opsi_c: string (required)
+    //   - opsi_d: string (required)
+    //   - kunci_jawaban: string (required, 'A', 'B', 'C', 'D')
+    //   - bobot_nilai: number (required)
+    //
+    // Collection: progres_siswa
+    // Document ID: auto
+    // Fields:
+    //   - siswa_id: string (required)
+    //   - modul_item_id: string (required)
+    //   - status_selesai: boolean (required)
+    //   - nilai: number (optional)
+    //   - file_submission: string (optional)
+    //   - waktu_selesai: string (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'ADMIN') ||
+        (request.auth.token.email == "rahmathidayat552@guru.smk.belajar.id" && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isGuru() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'GURU';
+    }
+
+    function isSiswa() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'SISWA';
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUser(data) {
+      return hasRequiredFields(['email', 'nama_lengkap', 'role']) &&
+             isValidEmail(data.email) &&
+             data.nama_lengkap is string && data.nama_lengkap.size() > 0 && data.nama_lengkap.size() < 100 &&
+             data.role in ['ADMIN', 'GURU', 'SISWA'] &&
+             (!('username' in data) || (data.username is string && data.username.size() < 50)) &&
+             (!('kelas_id' in data) || (data.kelas_id is string && data.kelas_id.size() < 50));
+    }
+
+    function isValidKelas(data) {
+      return hasRequiredFields(['nama_kelas', 'tingkat']) &&
+             data.nama_kelas is string && data.nama_kelas.size() > 0 && data.nama_kelas.size() < 50 &&
+             data.tingkat is number && data.tingkat > 0 && data.tingkat <= 12;
+    }
+
+    function isValidModul(data) {
+      return hasRequiredFields(['guru_id', 'kelas_id', 'judul_modul', 'tipe_target', 'is_published']) &&
+             data.guru_id is string && data.guru_id.size() > 0 &&
+             data.kelas_id is string && data.kelas_id.size() > 0 &&
+             data.judul_modul is string && data.judul_modul.size() > 0 && data.judul_modul.size() < 150 &&
+             (!('deskripsi' in data) || (data.deskripsi is string && data.deskripsi.size() < 2000)) &&
+             data.tipe_target in ['SELURUH_KELAS', 'SISWA_TERTENTU'] &&
+             (!('target_siswa_ids' in data) || (data.target_siswa_ids is list && data.target_siswa_ids.size() < 100)) &&
+             data.is_published is bool;
+    }
+
+    function isValidModulItem(data) {
+      return hasRequiredFields(['modul_id', 'tipe_item', 'judul_item', 'urutan']) &&
+             data.modul_id is string && data.modul_id.size() > 0 &&
+             data.tipe_item in ['MATERI', 'KUIS', 'SUBMISSION'] &&
+             data.judul_item is string && data.judul_item.size() > 0 && data.judul_item.size() < 150 &&
+             (!('konten' in data) || (data.konten is string && data.konten.size() < 10000)) &&
+             data.urutan is number && data.urutan > 0;
+    }
+
+    function isValidKuisSoal(data) {
+      return hasRequiredFields(['modul_item_id', 'pertanyaan', 'opsi_a', 'opsi_b', 'opsi_c', 'opsi_d', 'kunci_jawaban', 'bobot_nilai']) &&
+             data.modul_item_id is string && data.modul_item_id.size() > 0 &&
+             data.pertanyaan is string && data.pertanyaan.size() > 0 && data.pertanyaan.size() < 2000 &&
+             data.opsi_a is string && data.opsi_a.size() > 0 && data.opsi_a.size() < 500 &&
+             data.opsi_b is string && data.opsi_b.size() > 0 && data.opsi_b.size() < 500 &&
+             data.opsi_c is string && data.opsi_c.size() > 0 && data.opsi_c.size() < 500 &&
+             data.opsi_d is string && data.opsi_d.size() > 0 && data.opsi_d.size() < 500 &&
+             data.kunci_jawaban in ['A', 'B', 'C', 'D'] &&
+             data.bobot_nilai is number && data.bobot_nilai > 0;
+    }
+
+    function isValidProgresSiswa(data) {
+      return hasRequiredFields(['siswa_id', 'modul_item_id', 'status_selesai']) &&
+             data.siswa_id is string && data.siswa_id.size() > 0 &&
+             data.modul_item_id is string && data.modul_item_id.size() > 0 &&
+             data.status_selesai is bool &&
+             (!('nilai' in data) || (data.nilai is number && data.nilai >= 0 && data.nilai <= 100)) &&
+             (!('file_submission' in data) || (data.file_submission is string && data.file_submission.size() < 1000));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      // Anyone authenticated can read user profiles (needed for names)
+      allow read: if isAuthenticated();
+      // Only admin can create users, or users can create their own profile initially
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isAdmin() || isOwner(userId));
+      // Only admin can update users, or users can update their own profile (but not their role)
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (
+        isAdmin() || 
+        (isOwner(userId) && request.resource.data.role == resource.data.role)
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /kelas/{kelasId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin() && isValidKelas(request.resource.data);
+    }
+
+    match /moduls/{modulId} {
+      allow read: if isAuthenticated();
+      allow create: if (isAdmin() || isGuru()) && isValidModul(request.resource.data);
+      allow update: if (isAdmin() || (isGuru() && resource.data.guru_id == request.auth.uid)) && isValidModul(request.resource.data);
+      allow delete: if isAdmin() || (isGuru() && resource.data.guru_id == request.auth.uid);
+    }
+
+    match /modul_items/{itemId} {
+      allow read: if isAuthenticated();
+      allow create: if (isAdmin() || isGuru()) && isValidModulItem(request.resource.data);
+      allow update, delete: if isAdmin() || isGuru(); // Simplification: Guru can edit their items (should check modul ownership in real app)
+    }
+
+    match /kuis_soal/{soalId} {
+      // Siswa can read questions, but we need to hide answers ideally. 
+      // For this prototype, we allow read, but in production, answers should be verified server-side or in a separate collection.
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin() || isGuru();
+    }
+
+    match /progres_siswa/{progresId} {
+      allow read: if isAuthenticated() && (isAdmin() || isGuru() || resource.data.siswa_id == request.auth.uid);
+      // Siswa can create/update their own progress
+      allow create: if isAuthenticated() && isValidProgresSiswa(request.resource.data) && (isAdmin() || isGuru() || request.resource.data.siswa_id == request.auth.uid);
+      allow update: if isAuthenticated() && isValidProgresSiswa(request.resource.data) && (isAdmin() || isGuru() || (resource.data.siswa_id == request.auth.uid && request.resource.data.siswa_id == request.auth.uid));
+      allow delete: if isAdmin() || isGuru();
+    }
+  }
+}
