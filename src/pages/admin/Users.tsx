@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { UserProfile } from '../../contexts/AuthContext';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import * as XLSX from 'xlsx';
-import { Upload, Plus, Trash2, Search, Edit2, X, Download, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, Plus, Trash2, Search, Edit2, X, Download, ArrowLeft, CheckCircle, AlertCircle, Info } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Kelas {
@@ -12,8 +11,18 @@ interface Kelas {
   nama_kelas: string;
 }
 
+export interface MasterUser {
+  id: string;
+  nama_lengkap: string;
+  role: 'ADMIN' | 'GURU' | 'SISWA';
+  username: string; // NISN/NIP
+  tanggal_lahir: string; // YYYY-MM-DD
+  kelas_id?: string;
+  is_registered?: boolean;
+}
+
 export default function Users() {
-  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [users, setUsers] = useState<MasterUser[]>([]);
   const [kelasList, setKelasList] = useState<Kelas[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -25,27 +34,27 @@ export default function Users() {
   // Form state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
-    email: '',
     nama_lengkap: '',
     role: 'SISWA',
     username: '',
+    tanggal_lahir: '',
     kelas_id: ''
   });
 
   const fetchData = async () => {
     try {
       const [usersSnapshot, kelasSnapshot] = await Promise.all([
-        getDocs(collection(db, 'users')),
+        getDocs(collection(db, 'master_users')),
         getDocs(collection(db, 'kelas'))
       ]);
       
-      const usersData = usersSnapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+      const usersData = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MasterUser));
       const kelasData = kelasSnapshot.docs.map(doc => ({ id: doc.id, nama_kelas: doc.data().nama_kelas }));
       
       setUsers(usersData);
       setKelasList(kelasData);
     } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, 'users/kelas');
+      handleFirestoreError(error, OperationType.LIST, 'master_users/kelas');
     } finally {
       setLoading(false);
     }
@@ -58,17 +67,17 @@ export default function Users() {
   const handleDownloadTemplate = () => {
     const templateData = [
       {
-        email: 'siswa1@sekolah.id',
+        username: '1234567890',
         nama_lengkap: 'Budi Santoso',
         role: 'SISWA',
-        username: '1234567890',
+        tanggal_lahir: '2005-08-17',
         kelas_id: 'ID_KELAS_DARI_TABEL_KELAS'
       },
       {
-        email: 'guru1@sekolah.id',
+        username: '198001012005012001',
         nama_lengkap: 'Siti Aminah, S.Pd',
         role: 'GURU',
-        username: '198001012005012001',
+        tanggal_lahir: '1980-01-01',
         kelas_id: ''
       }
     ];
@@ -77,36 +86,36 @@ export default function Users() {
     
     // Set column widths
     ws['!cols'] = [
-      { wch: 25 }, // email
+      { wch: 20 }, // username
       { wch: 30 }, // nama_lengkap
       { wch: 10 }, // role
-      { wch: 20 }, // username
+      { wch: 15 }, // tanggal_lahir
       { wch: 30 }  // kelas_id
     ];
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Template_Pengguna');
+    XLSX.utils.book_append_sheet(wb, ws, 'Template_Data_Induk');
     
-    XLSX.writeFile(wb, 'Template_Import_Pengguna.xlsx');
+    XLSX.writeFile(wb, 'Template_Import_Data_Induk.xlsx');
   };
 
-  const handleOpenForm = (user?: UserProfile) => {
+  const handleOpenForm = (user?: MasterUser) => {
     if (user) {
-      setEditingId(user.uid);
+      setEditingId(user.id);
       setFormData({
-        email: user.email,
         nama_lengkap: user.nama_lengkap,
         role: user.role,
-        username: user.username || '',
+        username: user.username,
+        tanggal_lahir: user.tanggal_lahir || '',
         kelas_id: user.kelas_id || ''
       });
     } else {
       setEditingId(null);
       setFormData({
-        email: '',
         nama_lengkap: '',
         role: 'SISWA',
         username: '',
+        tanggal_lahir: '',
         kelas_id: ''
       });
     }
@@ -121,26 +130,32 @@ export default function Users() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      if (!formData.username) {
+        toast.error('NISN/NIP wajib diisi!');
+        return;
+      }
+
       const userData = {
-        email: formData.email.toLowerCase(),
         nama_lengkap: formData.nama_lengkap,
         role: formData.role,
         username: formData.username,
+        tanggal_lahir: formData.tanggal_lahir,
         kelas_id: formData.role === 'SISWA' ? formData.kelas_id : '',
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        is_registered: editingId ? (users.find(u => u.id === editingId)?.is_registered || false) : false
       };
 
-      // Use email as ID for new users so they can be matched on login
-      const docId = editingId || formData.email.toLowerCase();
+      // Use username (NISN/NIP) as the document ID
+      const docId = editingId || formData.username;
       
-      await setDoc(doc(db, 'users', docId), userData, { merge: true });
+      await setDoc(doc(db, 'master_users', docId), userData, { merge: true });
       
-      toast.success(editingId ? 'Pengguna berhasil diperbarui!' : 'Pengguna berhasil ditambahkan!');
+      toast.success(editingId ? 'Data induk berhasil diperbarui!' : 'Data induk berhasil ditambahkan!');
       handleCloseForm();
       fetchData();
     } catch (error) {
       toast.error('Terjadi kesalahan saat menyimpan data');
-      handleFirestoreError(error, editingId ? OperationType.UPDATE : OperationType.CREATE, 'users');
+      handleFirestoreError(error, editingId ? OperationType.UPDATE : OperationType.CREATE, 'master_users');
     }
   };
 
@@ -174,17 +189,19 @@ export default function Users() {
     let errorCount = 0;
 
     for (const row of previewData) {
-      if (row.email && row.nama_lengkap && row.role) {
+      if (row.username && row.nama_lengkap && row.role && row.tanggal_lahir) {
         try {
-          const newDocRef = doc(db, 'users', row.email.toLowerCase());
+          const docId = String(row.username);
+          const newDocRef = doc(db, 'master_users', docId);
           await setDoc(newDocRef, {
-            email: row.email.toLowerCase(),
+            username: docId,
             nama_lengkap: row.nama_lengkap,
             role: row.role.toUpperCase(),
-            username: row.username || '',
+            tanggal_lahir: row.tanggal_lahir,
             kelas_id: row.kelas_id || '',
+            is_registered: false,
             created_at: new Date().toISOString()
-          });
+          }, { merge: true });
           successCount++;
         } catch (error) {
           errorCount++;
@@ -195,7 +212,7 @@ export default function Users() {
     }
 
     if (successCount > 0) {
-      toast.success(`${successCount} pengguna berhasil diimpor!`);
+      toast.success(`${successCount} data induk berhasil diimpor!`);
     }
     if (errorCount > 0) {
       toast.error(`${errorCount} baris gagal diimpor karena data tidak valid.`);
@@ -206,24 +223,23 @@ export default function Users() {
     fetchData();
   };
 
-  const handleDelete = async (uid: string) => {
-    if (window.confirm('Yakin ingin menghapus pengguna ini?')) {
+  const handleDelete = async (id: string) => {
+    if (window.confirm('Yakin ingin menghapus data induk ini?')) {
       try {
-        await deleteDoc(doc(db, 'users', uid));
-        setUsers(users.filter(u => u.uid !== uid));
-        toast.success('Pengguna berhasil dihapus!');
+        await deleteDoc(doc(db, 'master_users', id));
+        setUsers(users.filter(u => u.id !== id));
+        toast.success('Data induk berhasil dihapus!');
       } catch (error) {
-        toast.error('Gagal menghapus pengguna');
-        handleFirestoreError(error, OperationType.DELETE, `users/${uid}`);
+        toast.error('Gagal menghapus data induk');
+        handleFirestoreError(error, OperationType.DELETE, `master_users/${id}`);
       }
     }
   };
 
   const filteredUsers = users.filter(u => 
     u.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (u.username && u.username.toLowerCase().includes(searchTerm.toLowerCase()))
+    u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    u.role.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const getKelasName = (kelasId?: string) => {
@@ -237,7 +253,7 @@ export default function Users() {
       <div className="space-y-6 max-w-2xl mx-auto">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            {editingId ? 'Edit Pengguna' : 'Tambah Pengguna'}
+            {editingId ? 'Edit Data Induk' : 'Tambah Data Induk'}
           </h1>
           <button 
             onClick={handleCloseForm}
@@ -248,21 +264,43 @@ export default function Users() {
           </button>
         </div>
 
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 flex items-start space-x-3">
+          <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+          <div className="text-sm text-blue-800 dark:text-blue-300">
+            <p><strong>Data Induk</strong> digunakan sebagai referensi saat siswa atau guru melakukan registrasi akun. Pastikan NISN/NIP dan Tanggal Lahir sesuai.</p>
+          </div>
+        </div>
+
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Email (Wajib, akun Google)
-              </label>
-              <input
-                type="email"
-                required
-                disabled={!!editingId}
-                value={formData.email}
-                onChange={(e) => setFormData({...formData, email: e.target.value})}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
-                placeholder="email@sekolah.id"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  NISN / NIP (Wajib)
+                </label>
+                <input
+                  type="text"
+                  required
+                  disabled={!!editingId}
+                  value={formData.username}
+                  onChange={(e) => setFormData({...formData, username: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                  placeholder="Masukkan NISN atau NIP"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Tanggal Lahir (Wajib)
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={formData.tanggal_lahir}
+                  onChange={(e) => setFormData({...formData, tanggal_lahir: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
             </div>
             
             <div>
@@ -296,37 +334,24 @@ export default function Users() {
                 </select>
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  NISN / NIP
-                </label>
-                <input
-                  type="text"
-                  value={formData.username}
-                  onChange={(e) => setFormData({...formData, username: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Opsional"
-                />
-              </div>
+              {formData.role === 'SISWA' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Kelas
+                  </label>
+                  <select
+                    value={formData.kelas_id}
+                    onChange={(e) => setFormData({...formData, kelas_id: e.target.value})}
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">-- Pilih Kelas --</option>
+                    {kelasList.map(kelas => (
+                      <option key={kelas.id} value={kelas.id}>{kelas.nama_kelas}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
-
-            {formData.role === 'SISWA' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Kelas
-                </label>
-                <select
-                  value={formData.kelas_id}
-                  onChange={(e) => setFormData({...formData, kelas_id: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">-- Pilih Kelas --</option>
-                  {kelasList.map(kelas => (
-                    <option key={kelas.id} value={kelas.id}>{kelas.nama_kelas}</option>
-                  ))}
-                </select>
-              </div>
-            )}
 
             <div className="pt-6 flex justify-end space-x-3 border-t border-gray-200 dark:border-gray-700">
               <button
@@ -340,7 +365,7 @@ export default function Users() {
                 type="submit"
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
               >
-                Simpan Pengguna
+                Simpan Data Induk
               </button>
             </div>
           </form>
@@ -354,7 +379,7 @@ export default function Users() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Preview Import Data</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Preview Import Data Induk</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Periksa kembali data sebelum mengimpor ke sistem.</p>
           </div>
           <div className="flex items-center space-x-3">
@@ -383,15 +408,15 @@ export default function Users() {
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
                   <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Nama Lengkap</th>
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Email</th>
-                  <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Role</th>
                   <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">NISN/NIP</th>
+                  <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Nama Lengkap</th>
+                  <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tgl Lahir</th>
+                  <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Role</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {previewData.map((row, index) => {
-                  const isValid = row.email && row.nama_lengkap && ['ADMIN', 'GURU', 'SISWA'].includes(row.role?.toUpperCase());
+                  const isValid = row.username && row.nama_lengkap && row.tanggal_lahir && ['ADMIN', 'GURU', 'SISWA'].includes(row.role?.toUpperCase());
                   return (
                     <tr key={index} className={isValid ? 'hover:bg-gray-50 dark:hover:bg-gray-700/50' : 'bg-red-50 dark:bg-red-900/10'}>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -402,16 +427,16 @@ export default function Users() {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                        {row.username || <span className="text-red-500 italic">Kosong</span>}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
                         {row.nama_lengkap || <span className="text-red-500 italic">Kosong</span>}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
-                        {row.email || <span className="text-red-500 italic">Kosong</span>}
+                        {row.tanggal_lahir || <span className="text-red-500 italic">Kosong</span>}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
                         {row.role || <span className="text-red-500 italic">Kosong</span>}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
-                        {row.username || '-'}
                       </td>
                     </tr>
                   );
@@ -427,7 +452,10 @@ export default function Users() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Manajemen Pengguna</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Data Induk Pengguna</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Kelola data dasar siswa dan guru untuk keperluan registrasi.</p>
+        </div>
         
         <div className="flex items-center space-x-3">
           <button 
@@ -458,7 +486,7 @@ export default function Users() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Cari nama, email, NISN/NIP, atau role..."
+              placeholder="Cari nama, NISN/NIP, atau role..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -470,29 +498,32 @@ export default function Users() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
-                <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Nama & Identitas</th>
-                <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Kontak</th>
+                <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Nama & NISN/NIP</th>
+                <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tgl Lahir</th>
                 <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Role & Kelas</th>
+                <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status Akun</th>
                 <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">Memuat data...</td>
+                  <td colSpan={5} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">Memuat data...</td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">Tidak ada pengguna ditemukan.</td>
+                  <td colSpan={5} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">Tidak ada data ditemukan.</td>
                 </tr>
               ) : (
                 filteredUsers.map((user) => (
-                  <tr key={user.uid} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                  <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="font-medium text-gray-900 dark:text-white">{user.nama_lengkap}</div>
-                      {user.username && <div className="text-xs text-gray-500 dark:text-gray-400">ID: {user.username}</div>}
+                      <div className="text-xs text-gray-500 dark:text-gray-400">ID: {user.username}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-600 dark:text-gray-300">{user.email}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
+                      {user.tanggal_lahir}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex flex-col space-y-1">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full w-fit
@@ -508,12 +539,23 @@ export default function Users() {
                         )}
                       </div>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {user.is_registered ? (
+                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                          Terdaftar
+                        </span>
+                      ) : (
+                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400">
+                          Belum Terdaftar
+                        </span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center space-x-3">
                         <button onClick={() => handleOpenForm(user)} className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300">
                           <Edit2 className="w-5 h-5" />
                         </button>
-                        <button onClick={() => handleDelete(user.uid)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">
+                        <button onClick={() => handleDelete(user.id)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">
                           <Trash2 className="w-5 h-5" />
                         </button>
                       </div>

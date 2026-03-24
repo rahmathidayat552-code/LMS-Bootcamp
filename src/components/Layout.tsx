@@ -1,27 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { BookOpen, Users, Settings, LogOut, Menu, X, Moon, Sun, LayoutDashboard } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
+import { BookOpen, Users, Settings, LogOut, Menu, X, Moon, Sun, Monitor, LayoutDashboard } from 'lucide-react';
 
 export default function Layout() {
   const { profile, logout } = useAuth();
+  const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    const saved = localStorage.getItem('theme');
-    return saved ? saved === 'dark' : true; // Default to dark mode
-  });
 
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-    }
-  }, [isDarkMode]);
+  const isDarkMode = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+  const toggleTheme = () => {
+    if (theme === 'light') setTheme('dark');
+    else if (theme === 'dark') setTheme('system');
+    else setTheme('light');
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -35,6 +31,7 @@ export default function Layout() {
     { name: 'Modul Belajar', path: '/guru/modul', icon: BookOpen, roles: ['GURU'] },
     { name: 'Penilaian', path: '/guru/penilaian', icon: Settings, roles: ['GURU'] },
     { name: 'Modul Saya', path: '/siswa/modul', icon: BookOpen, roles: ['SISWA'] },
+    { name: 'Pengaturan', path: '/pengaturan', icon: Settings, roles: ['ADMIN', 'GURU', 'SISWA'] },
   ];
 
   const filteredNavItems = navItems.filter(item => profile && item.roles.includes(profile.role));
@@ -48,8 +45,8 @@ export default function Layout() {
           <span className="font-bold text-lg">LMS SMKN 9</span>
         </div>
         <div className="flex items-center space-x-4">
-          <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
-            {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+            {theme === 'system' ? <Monitor className="w-5 h-5" /> : theme === 'dark' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
           </button>
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
             {isSidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -69,8 +66,8 @@ export default function Layout() {
               <BookOpen className="w-8 h-8 text-blue-600 dark:text-blue-400" />
               <span className="font-bold text-xl">LMS SMKN 9</span>
             </div>
-            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
-              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+              {theme === 'system' ? <Monitor className="w-5 h-5" /> : theme === 'dark' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
             </button>
           </div>
 

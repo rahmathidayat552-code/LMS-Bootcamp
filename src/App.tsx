@@ -1,10 +1,18 @@
+import React from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Users from './pages/admin/Users';
 import Kelas from './pages/admin/Kelas';
+import ModulList from './pages/guru/Modul';
+import ModulForm from './pages/guru/ModulForm';
+import ModulSiswaList from './pages/siswa/ModulList';
+import ModulSiswaDetail from './pages/siswa/ModulDetail';
+import Settings from './pages/Settings';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toaster } from 'sonner';
 
@@ -30,11 +38,13 @@ const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode,
 export default function App() {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <Router>
+      <ThemeProvider>
+        <AuthProvider>
+          <Router>
           <Toaster position="top-right" richColors />
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
             
             <Route path="/" element={
               <ProtectedRoute>
@@ -58,20 +68,43 @@ export default function App() {
               {/* Guru Routes */}
               <Route path="guru/modul" element={
                 <ProtectedRoute allowedRoles={['GURU']}>
-                  <div className="p-4">Manajemen Modul (Segera Hadir)</div>
+                  <ModulList />
+                </ProtectedRoute>
+              } />
+              <Route path="guru/modul/create" element={
+                <ProtectedRoute allowedRoles={['GURU']}>
+                  <ModulForm />
+                </ProtectedRoute>
+              } />
+              <Route path="guru/modul/:id" element={
+                <ProtectedRoute allowedRoles={['GURU']}>
+                  <ModulForm />
                 </ProtectedRoute>
               } />
               
               {/* Siswa Routes */}
               <Route path="siswa/modul" element={
                 <ProtectedRoute allowedRoles={['SISWA']}>
-                  <div className="p-4">Modul Belajar (Segera Hadir)</div>
+                  <ModulSiswaList />
+                </ProtectedRoute>
+              } />
+              <Route path="siswa/modul/:id" element={
+                <ProtectedRoute allowedRoles={['SISWA']}>
+                  <ModulSiswaDetail />
+                </ProtectedRoute>
+              } />
+
+              {/* Shared Routes */}
+              <Route path="pengaturan" element={
+                <ProtectedRoute allowedRoles={['ADMIN', 'GURU', 'SISWA']}>
+                  <Settings />
                 </ProtectedRoute>
               } />
             </Route>
           </Routes>
         </Router>
-      </AuthProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

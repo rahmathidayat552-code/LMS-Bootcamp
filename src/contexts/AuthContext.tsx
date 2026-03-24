@@ -1,7 +1,17 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../firebase';
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User as FirebaseUser, setPersistence, browserLocalPersistence } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { 
+  onAuthStateChanged, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signOut, 
+  User as FirebaseUser, 
+  setPersistence, 
+  browserLocalPersistence,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword
+} from 'firebase/auth';
+import { doc, getDoc, setDoc, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
 
 export type Role = 'ADMIN' | 'GURU' | 'SISWA';
 
@@ -19,6 +29,7 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   loginWithGoogle: () => Promise<void>;
+  loginWithEmail: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -30,7 +41,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Ensure persistence is set
     setPersistence(auth, browserLocalPersistence).catch(console.error);
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -38,41 +48,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (firebaseUser) {
         try {
           const userDocRef = doc(db, 'users', firebaseUser.uid);
-          const userDoc = await getDoc(userDocRef);
+          
+          // Retry logic for fetching user profile (handles registration race condition)
+          let userDoc = await getDoc(userDocRef);
+          let retries = 0;
+          
+          while (!userDoc.exists() && retries < 3) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            userDoc = await getDoc(userDocRef);
+            retries++;
+          }
           
           if (userDoc.exists()) {
             setProfile({ uid: firebaseUser.uid, ...userDoc.data() } as UserProfile);
           } else {
-            // Check if there's a pre-registered user with this email
-            const q = query(collection(db, 'users'), where('email', '==', firebaseUser.email?.toLowerCase()));
-            const querySnapshot = await getDocs(q);
-            
-            let newProfile: Omit<UserProfile, 'uid'>;
-            
-            if (!querySnapshot.empty) {
-              // Use pre-registered data
-              const preRegData = querySnapshot.docs[0].data();
-              newProfile = {
+            // Check if this is the default admin logging in with Google
+            const isDefaultAdmin = firebaseUser.email === 'rahmathidayat552@guru.smk.belajar.id';
+            if (isDefaultAdmin) {
+              const newProfile = {
                 email: firebaseUser.email || '',
-                nama_lengkap: preRegData.nama_lengkap || firebaseUser.displayName || 'User',
-                role: preRegData.role || 'SISWA',
-                username: preRegData.username || '',
-                kelas_id: preRegData.kelas_id || '',
-                created_at: preRegData.created_at || new Date().toISOString()
-              };
-            } else {
-              // Check if this is the default admin
-              const isDefaultAdmin = firebaseUser.email === 'rahmathidayat552@guru.smk.belajar.id';
-              newProfile = {
-                email: firebaseUser.email || '',
-                nama_lengkap: firebaseUser.displayName || 'User',
-                role: isDefaultAdmin ? 'ADMIN' : 'SISWA', // Default to SISWA if not admin
+                nama_lengkap: firebaseUser.displayName || 'Admin',
+                role: 'ADMIN' as Role,
                 created_at: new Date().toISOString()
               };
+              await setDoc(userDocRef, newProfile);
+              setProfile({ uid: firebaseUser.uid, ...newProfile } as UserProfile);
+            } else {
+              // If not admin and no profile exists after retries, they must register first
+              // We will sign them out if they try to bypass registration with Google
+              await signOut(auth);
+              setProfile(null);
+              setUser(null);
+              console.error('Silakan registrasi terlebih dahulu menggunakan NISN/NIP.');
             }
-            
-            await setDoc(userDocRef, newProfile);
-            setProfile({ uid: firebaseUser.uid, ...newProfile } as UserProfile);
           }
         } catch (error) {
           console.error("Error fetching user profile:", error);
@@ -96,6 +104,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const loginWithEmail = async (email: string, password: string) => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      console.error("Error signing in with email:", error);
+      throw error;
+    }
+  };
+
   const logout = async () => {
     try {
       await signOut(auth);
@@ -105,7 +122,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, profile, loading, loginWithGoogle, loginWithEmail, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -31,15 +31,17 @@
       "type": "object",
       "properties": {
         "guru_id": { "type": "string" },
-        "kelas_id": { "type": "string" },
+        "mata_pelajaran": { "type": "string" },
         "judul_modul": { "type": "string" },
         "deskripsi": { "type": "string" },
-        "tipe_target": { "type": "string", "enum": ["SELURUH_KELAS", "SISWA_TERTENTU"] },
+        "tipe_target": { "type": "string", "enum": ["KELAS", "SISWA"] },
+        "target_kelas_ids": { "type": "array", "items": { "type": "string" } },
         "target_siswa_ids": { "type": "array", "items": { "type": "string" } },
+        "ikon": { "type": "string", "description": "URL or base64 of the module icon" },
         "is_published": { "type": "boolean" },
         "created_at": { "type": "string", "format": "date-time" }
       },
-      "required": ["guru_id", "kelas_id", "judul_modul", "tipe_target", "is_published"]
+      "required": ["guru_id", "mata_pelajaran", "judul_modul", "tipe_target", "is_published"]
     },
     "ModulItem": {
       "title": "Modul Item",
@@ -47,8 +49,9 @@
       "type": "object",
       "properties": {
         "modul_id": { "type": "string" },
-        "tipe_item": { "type": "string", "enum": ["MATERI", "KUIS", "SUBMISSION"] },
+        "tipe_item": { "type": "string", "enum": ["MATERI", "PDF", "YOUTUBE", "KUIS", "TUGAS"] },
         "judul_item": { "type": "string" },
+        "deskripsi": { "type": "string" },
         "konten": { "type": "string" },
         "urutan": { "type": "number" },
         "created_at": { "type": "string", "format": "date-time" }
@@ -78,10 +81,13 @@
       "properties": {
         "siswa_id": { "type": "string" },
         "modul_item_id": { "type": "string" },
+        "modul_id": { "type": "string" },
         "status_selesai": { "type": "boolean" },
         "nilai": { "type": "number" },
         "file_submission": { "type": "string" },
-        "waktu_selesai": { "type": "string", "format": "date-time" }
+        "link_tugas": { "type": "string" },
+        "jawaban": { "type": "object" },
+        "selesai_pada": { "type": "string", "format": "date-time" }
       },
       "required": ["siswa_id", "modul_item_id", "status_selesai"]
     }

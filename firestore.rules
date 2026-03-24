@@ -27,10 +27,11 @@ service cloud.firestore {
     // Document ID: auto
     // Fields:
     //   - guru_id: string (required)
-    //   - kelas_id: string (required)
+    //   - mata_pelajaran: string (required)
     //   - judul_modul: string (required)
     //   - deskripsi: string (optional)
-    //   - tipe_target: string (required, 'SELURUH_KELAS', 'SISWA_TERTENTU')
+    //   - tipe_target: string (required, 'KELAS', 'SISWA')
+    //   - target_kelas_ids: list (optional)
     //   - target_siswa_ids: list (optional)
     //   - is_published: boolean (required)
     //   - created_at: string (optional)
@@ -39,9 +40,10 @@ service cloud.firestore {
     // Document ID: auto
     // Fields:
     //   - modul_id: string (required)
-    //   - tipe_item: string (required, 'MATERI', 'KUIS', 'SUBMISSION')
+    //   - tipe_item: string (required, 'MATERI', 'PDF', 'YOUTUBE', 'KUIS', 'TUGAS')
     //   - judul_item: string (required)
-    //   - konten: string (optional)
+    //   - deskripsi: string (optional)
+    //   - konten: string (optional, URL or text)
     //   - urutan: number (required)
     //   - created_at: string (optional)
     //
@@ -123,22 +125,25 @@ service cloud.firestore {
     }
 
     function isValidModul(data) {
-      return hasRequiredFields(['guru_id', 'kelas_id', 'judul_modul', 'tipe_target', 'is_published']) &&
+      return hasRequiredFields(['guru_id', 'mata_pelajaran', 'judul_modul', 'tipe_target', 'is_published']) &&
              data.guru_id is string && data.guru_id.size() > 0 &&
-             data.kelas_id is string && data.kelas_id.size() > 0 &&
+             data.mata_pelajaran is string && data.mata_pelajaran.size() > 0 && data.mata_pelajaran.size() < 100 &&
              data.judul_modul is string && data.judul_modul.size() > 0 && data.judul_modul.size() < 150 &&
              (!('deskripsi' in data) || (data.deskripsi is string && data.deskripsi.size() < 2000)) &&
-             data.tipe_target in ['SELURUH_KELAS', 'SISWA_TERTENTU'] &&
+             data.tipe_target in ['KELAS', 'SISWA'] &&
+             (!('target_kelas_ids' in data) || (data.target_kelas_ids is list && data.target_kelas_ids.size() < 100)) &&
              (!('target_siswa_ids' in data) || (data.target_siswa_ids is list && data.target_siswa_ids.size() < 100)) &&
+             (!('ikon' in data) || (data.ikon is string && data.ikon.size() < 500000)) &&
              data.is_published is bool;
     }
 
     function isValidModulItem(data) {
       return hasRequiredFields(['modul_id', 'tipe_item', 'judul_item', 'urutan']) &&
              data.modul_id is string && data.modul_id.size() > 0 &&
-             data.tipe_item in ['MATERI', 'KUIS', 'SUBMISSION'] &&
+             data.tipe_item in ['MATERI', 'PDF', 'YOUTUBE', 'KUIS', 'TUGAS'] &&
              data.judul_item is string && data.judul_item.size() > 0 && data.judul_item.size() < 150 &&
-             (!('konten' in data) || (data.konten is string && data.konten.size() < 10000)) &&
+             (!('deskripsi' in data) || (data.deskripsi is string && data.deskripsi.size() < 5000)) &&
+             (!('konten' in data) || (data.konten is string && data.konten.size() < 50000)) &&
              data.urutan is number && data.urutan > 0;
     }
 
@@ -159,13 +164,38 @@ service cloud.firestore {
              data.siswa_id is string && data.siswa_id.size() > 0 &&
              data.modul_item_id is string && data.modul_item_id.size() > 0 &&
              data.status_selesai is bool &&
+             (!('modul_id' in data) || (data.modul_id is string && data.modul_id.size() > 0)) &&
              (!('nilai' in data) || (data.nilai is number && data.nilai >= 0 && data.nilai <= 100)) &&
-             (!('file_submission' in data) || (data.file_submission is string && data.file_submission.size() < 1000));
+             (!('file_submission' in data) || (data.file_submission is string && data.file_submission.size() < 1000)) &&
+             (!('link_tugas' in data) || (data.link_tugas is string && data.link_tugas.size() < 1000)) &&
+             (!('jawaban' in data) || data.jawaban is map) &&
+             (!('selesai_pada' in data) || data.selesai_pada is timestamp);
+    }
+
+    function isValidMasterUser(data) {
+      return hasRequiredFields(['username', 'nama_lengkap', 'role', 'tanggal_lahir', 'is_registered']) &&
+             data.username is string && data.username.size() > 0 && data.username.size() < 50 &&
+             data.nama_lengkap is string && data.nama_lengkap.size() > 0 && data.nama_lengkap.size() < 100 &&
+             data.role in ['ADMIN', 'GURU', 'SISWA'] &&
+             data.tanggal_lahir is string && data.tanggal_lahir.size() > 0 && data.tanggal_lahir.size() < 20 &&
+             data.is_registered is bool &&
+             (!('kelas_id' in data) || (data.kelas_id is string && data.kelas_id.size() < 50));
     }
 
     // ===============================================================
     // Rules
     // ===============================================================
+
+    match /master_users/{usernameId} {
+      allow get: if true; // Anyone can get by ID to verify registration
+      allow list: if isAdmin(); // Only admin can list all
+      allow create: if isAdmin() && isValidMasterUser(request.resource.data);
+      allow update: if (isAdmin() && isValidMasterUser(request.resource.data)) || 
+                       (isAuthenticated() && 
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_registered']) && 
+                        request.resource.data.is_registered == true);
+      allow delete: if isAdmin();
+    }
 
     match /users/{userId} {
       // Anyone authenticated can read user profiles (needed for names)
