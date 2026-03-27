@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, deleteDoc, doc, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, deleteDoc, doc, orderBy, writeBatch, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen, Plus, Edit, Trash2, Eye, Users } from 'lucide-react';
+import { BookOpen, Plus, Edit, Trash2, Eye, Users, Copy, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface Modul {
   id: string;
@@ -21,6 +22,11 @@ export default function ModulList() {
   const navigate = useNavigate();
   const [moduls, setModuls] = useState<Modul[]>([]);
   const [loading, setLoading] = useState(true);
+  const [copying, setCopying] = useState(false);
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [selectedModulForCopy, setSelectedModulForCopy] = useState<Modul | null>(null);
+  const [hasSubsequent, setHasSubsequent] = useState(false);
+  const [copySubsequent, setCopySubsequent] = useState(false);
 
   const fetchModuls = async () => {
     if (!user) return;
@@ -61,6 +67,90 @@ export default function ModulList() {
         console.error('Error deleting modul:', error);
         toast.error('Gagal menghapus modul');
       }
+    }
+  };
+
+  const checkSubsequent = async (modulId: string) => {
+    const q = query(collection(db, 'moduls'), where('prasyarat_id', '==', modulId));
+    const snapshot = await getDocs(q);
+    return !snapshot.empty;
+  };
+
+  const openCopyModal = async (modul: Modul) => {
+    setSelectedModulForCopy(modul);
+    const hasSub = await checkSubsequent(modul.id);
+    setHasSubsequent(hasSub);
+    setCopySubsequent(false);
+    setShowCopyModal(true);
+  };
+
+  const handleCopy = async () => {
+    if (!selectedModulForCopy || !user) return;
+    
+    setCopying(true);
+    setShowCopyModal(false);
+    
+    try {
+      const batch = writeBatch(db);
+      
+      // Recursive function to copy module and its subsequent modules
+      const copyModuleRecursive = async (originalId: string, newPrasyaratId: string | null, suffix: string = ' (Copy)') => {
+        // 1. Fetch original module data
+        const originalDoc = await getDoc(doc(db, 'moduls', originalId));
+        if (!originalDoc.exists()) return null;
+        
+        const originalData = originalDoc.data();
+        const newModulRef = doc(collection(db, 'moduls'));
+        const newModulId = newModulRef.id;
+        
+        // 2. Create new module data
+        const newModulData = {
+          ...originalData,
+          judul_modul: originalData.judul_modul + suffix,
+          prasyarat_id: newPrasyaratId,
+          created_at: new Date().toISOString(),
+          is_published: false // Always copy as draft
+        };
+        
+        batch.set(newModulRef, newModulData);
+        
+        // 3. Copy modul items
+        const itemsQuery = query(collection(db, 'modul_items'), where('modul_id', '==', originalId));
+        const itemsSnapshot = await getDocs(itemsQuery);
+        
+        itemsSnapshot.docs.forEach(itemDoc => {
+          const newItemRef = doc(collection(db, 'modul_items'));
+          batch.set(newItemRef, {
+            ...itemDoc.data(),
+            modul_id: newModulId,
+            created_at: new Date().toISOString()
+          });
+        });
+        
+        // 4. If copySubsequent is true, find and copy child modules
+        if (copySubsequent) {
+          const childrenQuery = query(collection(db, 'moduls'), where('prasyarat_id', '==', originalId));
+          const childrenSnapshot = await getDocs(childrenQuery);
+          
+          for (const childDoc of childrenSnapshot.docs) {
+            await copyModuleRecursive(childDoc.id, newModulId, ''); // No suffix for subsequent modules to keep it clean
+          }
+        }
+        
+        return newModulId;
+      };
+
+      await copyModuleRecursive(selectedModulForCopy.id, (selectedModulForCopy as any).prasyarat_id || null);
+      
+      await batch.commit();
+      toast.success('Modul berhasil disalin');
+      fetchModuls();
+    } catch (error) {
+      console.error('Error copying modul:', error);
+      toast.error('Gagal menyalin modul');
+    } finally {
+      setCopying(false);
+      setSelectedModulForCopy(null);
     }
   };
 
@@ -131,6 +221,21 @@ export default function ModulList() {
                 </div>
               </div>
               <div className="bg-gray-50 dark:bg-gray-800/50 px-6 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
+                <button
+                  onClick={() => openCopyModal(modul)}
+                  className="p-2 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
+                  title="Salin Modul"
+                  disabled={copying}
+                >
+                  <Copy className="w-5 h-5" />
+                </button>
+                <Link
+                  to={`/guru/modul/create?prasyarat=${modul.id}`}
+                  className="p-2 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
+                  title="Tambah Modul Lanjutan"
+                >
+                  <Plus className="w-5 h-5" />
+                </Link>
                 <Link
                   to={`/guru/modul/${modul.id}`}
                   className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
@@ -150,6 +255,86 @@ export default function ModulList() {
           ))}
         </div>
       )}
+
+      {/* Copy Modal */}
+      <AnimatePresence>
+        {showCopyModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Salin Modul</h3>
+                  <button onClick={() => setShowCopyModal(false)} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+                
+                <p className="text-gray-600 dark:text-gray-400 mb-6">
+                  Anda akan menyalin modul <span className="font-semibold text-gray-900 dark:text-white">"{selectedModulForCopy?.judul_modul}"</span>.
+                </p>
+
+                {hasSubsequent && (
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl p-4 mb-6">
+                    <div className="flex items-start space-x-3">
+                      <div className="flex-shrink-0 mt-0.5">
+                        <BookOpen className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-blue-800 dark:text-blue-300">Modul Lanjutan Terdeteksi</p>
+                        <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                          Modul ini memiliki modul-modul lanjutan yang bergantung padanya. Apakah Anda juga ingin menyalin seluruh rangkaian modul tersebut?
+                        </p>
+                        <label className="flex items-center space-x-2 mt-3 cursor-pointer group">
+                          <input
+                            type="checkbox"
+                            checked={copySubsequent}
+                            onChange={(e) => setCopySubsequent(e.target.checked)}
+                            className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-blue-700 dark:text-blue-300 group-hover:underline">Ya, salin juga modul lanjutan</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => setShowCopyModal(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    onClick={handleCopy}
+                    className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors flex items-center justify-center"
+                  >
+                    Salin Sekarang
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Copying Overlay */}
+      <AnimatePresence>
+        {copying && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+            <div className="text-center">
+              <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">Menyalin Modul...</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Mohon tunggu sebentar, kami sedang menduplikasi data Anda.</p>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

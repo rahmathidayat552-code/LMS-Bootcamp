@@ -8,11 +8,15 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Users from './pages/admin/Users';
 import Kelas from './pages/admin/Kelas';
+import ManajemenSiswa from './pages/admin/ManajemenSiswa';
+import ManajemenGuru from './pages/admin/ManajemenGuru';
 import ModulList from './pages/guru/Modul';
 import ModulForm from './pages/guru/ModulForm';
+import Penilaian from './pages/guru/Penilaian';
 import ModulSiswaList from './pages/siswa/ModulList';
 import ModulSiswaDetail from './pages/siswa/ModulDetail';
 import Settings from './pages/Settings';
+import Profile from './pages/Profile';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toaster } from 'sonner';
 
@@ -64,6 +68,16 @@ export default function App() {
                   <Kelas />
                 </ProtectedRoute>
               } />
+              <Route path="admin/guru" element={
+                <ProtectedRoute allowedRoles={['ADMIN']}>
+                  <ManajemenGuru />
+                </ProtectedRoute>
+              } />
+              <Route path="admin/siswa" element={
+                <ProtectedRoute allowedRoles={['ADMIN']}>
+                  <ManajemenSiswa />
+                </ProtectedRoute>
+              } />
               
               {/* Guru Routes */}
               <Route path="guru/modul" element={
@@ -81,6 +95,11 @@ export default function App() {
                   <ModulForm />
                 </ProtectedRoute>
               } />
+              <Route path="guru/penilaian" element={
+                <ProtectedRoute allowedRoles={['GURU']}>
+                  <Penilaian />
+                </ProtectedRoute>
+              } />
               
               {/* Siswa Routes */}
               <Route path="siswa/modul" element={
@@ -95,6 +114,11 @@ export default function App() {
               } />
 
               {/* Shared Routes */}
+              <Route path="profil" element={
+                <ProtectedRoute allowedRoles={['ADMIN', 'GURU', 'SISWA']}>
+                  <Profile />
+                </ProtectedRoute>
+              } />
               <Route path="pengaturan" element={
                 <ProtectedRoute allowedRoles={['ADMIN', 'GURU', 'SISWA']}>
                   <Settings />

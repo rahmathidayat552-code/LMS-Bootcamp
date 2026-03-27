@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, getDocs, orderBy, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
-import { BookOpen, FileText, Youtube, CheckCircle, ChevronLeft, ChevronRight, PlayCircle, FileUp, ListChecks } from 'lucide-react';
+import { BookOpen, FileText, Youtube, CheckCircle, ChevronLeft, ChevronRight, PlayCircle, FileUp, ListChecks, Download, ExternalLink as ExternalLinkIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import 'react-quill-new/dist/quill.snow.css';
 
@@ -38,6 +38,8 @@ export default function ModulSiswaDetail() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<Record<string, any>>({});
+  const [isPrerequisiteMet, setIsPrerequisiteMet] = useState(true);
+  const [prerequisiteModul, setPrerequisiteModul] = useState<any>(null);
   
   // State for Kuis
   const [kuisAnswers, setKuisAnswers] = useState<Record<number, string>>({});
@@ -60,7 +62,8 @@ export default function ModulSiswaDetail() {
           navigate('/siswa/modul');
           return;
         }
-        setModul({ id: modulDoc.id, ...modulDoc.data() });
+        const currentModulData = modulDoc.data();
+        setModul({ id: modulDoc.id, ...currentModulData });
 
         // Fetch Items
         const itemsRef = collection(db, 'modul_items');
@@ -78,6 +81,55 @@ export default function ModulSiswaDetail() {
           fetchedProgress[doc.data().modul_item_id] = doc.data();
         });
         setProgress(fetchedProgress);
+
+        // Check Prerequisite
+        if (currentModulData?.prasyarat_id) {
+          const preDoc = await getDoc(doc(db, 'moduls', currentModulData.prasyarat_id));
+          if (preDoc.exists()) {
+            const preData = { id: preDoc.id, ...preDoc.data() };
+            setPrerequisiteModul(preData);
+
+            // Check if prerequisite is completed
+            // 1. Get all items of prerequisite modul
+            const preItemsRef = collection(db, 'modul_items');
+            const qPreItems = query(preItemsRef, where('modul_id', '==', preData.id));
+            const preItemsSnapshot = await getDocs(qPreItems);
+            const preItemsCount = preItemsSnapshot.size;
+
+            // 2. Get student's progress for prerequisite modul
+            const preProgressRef = collection(db, 'progres_siswa');
+            const qPreProgress = query(
+              preProgressRef, 
+              where('modul_id', '==', preData.id), 
+              where('siswa_id', '==', profile.uid),
+              where('status_selesai', '==', true)
+            );
+            const preProgressSnapshot = await getDocs(qPreProgress);
+            const preCompletedCount = preProgressSnapshot.size;
+
+            // 3. Check if all items are completed AND if there are quizzes/assignments, they must be graded
+            // For simplicity, we check if completed count matches total count
+            // and if there are any ungraded assignments
+            let allGraded = true;
+            const completedItems = preProgressSnapshot.docs.map(doc => doc.data());
+            
+            preItemsSnapshot.docs.forEach(itemDoc => {
+              const item = itemDoc.data();
+              const progressItem = completedItems.find(p => p.modul_item_id === itemDoc.id);
+              
+              if (!progressItem || !progressItem.status_selesai) {
+                allGraded = false;
+              } else if (item.tipe_item === 'TUGAS' && progressItem.nilai === undefined) {
+                // If it's a task but has no grade yet
+                allGraded = false;
+              }
+            });
+
+            if (!allGraded) {
+              setIsPrerequisiteMet(false);
+            }
+          }
+        }
 
       } catch (error) {
         console.error('Error fetching modul:', error);
@@ -282,8 +334,8 @@ export default function ModulSiswaDetail() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="flex justify-center items-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
   }
@@ -296,6 +348,36 @@ export default function ModulSiswaDetail() {
         <button onClick={() => navigate('/siswa/modul')} className="text-blue-600 hover:underline">
           Kembali ke Daftar Modul
         </button>
+      </div>
+    );
+  }
+
+  if (!isPrerequisiteMet) {
+    return (
+      <div className="max-w-4xl mx-auto py-12 px-4 text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-12 border border-gray-100 dark:border-gray-700">
+          <div className="w-20 h-20 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-500 rounded-full flex items-center justify-center mx-auto mb-6">
+            <PlayCircle className="w-10 h-10" />
+          </div>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Modul Terkunci</h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-8 max-w-md mx-auto">
+            Anda harus menyelesaikan modul prasyarat: <span className="font-bold text-blue-600 dark:text-blue-400">"{prerequisiteModul?.judul_modul}"</span> terlebih dahulu sebelum dapat mengakses modul ini.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <button 
+              onClick={() => navigate(`/siswa/modul/${prerequisiteModul?.id}`)}
+              className="w-full sm:w-auto px-8 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 dark:shadow-none"
+            >
+              Buka Modul Prasyarat
+            </button>
+            <button 
+              onClick={() => navigate('/siswa/modul')}
+              className="w-full sm:w-auto px-8 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-semibold rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
+            >
+              Kembali ke Daftar
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -321,14 +403,27 @@ export default function ModulSiswaDetail() {
             <p className="text-gray-500 dark:text-gray-400 mb-6 text-center max-w-md">
               Silakan unduh atau buka dokumen PDF ini untuk mempelajari materi lebih lanjut.
             </p>
-            <a 
-              href={currentItem.konten} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              Buka Dokumen PDF
-            </a>
+            <div className="flex flex-wrap items-center justify-center gap-4">
+              <a 
+                href={currentItem.konten} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center px-6 py-3 border border-transparent text-base font-semibold rounded-xl shadow-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all hover:scale-105 active:scale-95"
+              >
+                <ExternalLinkIcon className="w-5 h-5 mr-2" />
+                Buka Dokumen PDF
+              </a>
+              <a 
+                href={currentItem.konten} 
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center px-6 py-3 border border-gray-300 dark:border-gray-600 text-base font-semibold rounded-xl shadow-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all hover:scale-105 active:scale-95"
+              >
+                <Download className="w-5 h-5 mr-2" />
+                Unduh PDF
+              </a>
+            </div>
           </div>
         );
       case 'YOUTUBE':
@@ -640,25 +735,48 @@ export default function ModulSiswaDetail() {
         </div>
 
         {/* Navigation Controls */}
-        <div className="flex items-center justify-between pt-4">
-          <button
-            onClick={handlePrev}
-            disabled={currentIndex === 0}
-            className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4 mr-2" />
-            Sebelumnya
-          </button>
-          
-          {currentItem.tipe_item !== 'KUIS' && currentItem.tipe_item !== 'TUGAS' && (
+        <div className="sticky bottom-4 left-0 right-0 z-20 mt-8">
+          <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-md border border-gray-200 dark:border-gray-700 rounded-2xl p-4 shadow-xl flex items-center justify-between">
+            <button
+              onClick={handlePrev}
+              disabled={currentIndex === 0}
+              className="flex items-center px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-105 active:scale-95"
+            >
+              <ChevronLeft className="w-5 h-5 mr-2" />
+              Sebelumnya
+            </button>
+            
+            <div className="hidden sm:flex items-center space-x-1">
+              {items.map((_, idx) => (
+                <div 
+                  key={idx}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    idx === currentIndex 
+                      ? 'w-8 bg-blue-600 dark:bg-blue-400' 
+                      : progress[items[idx].id]?.status_selesai 
+                        ? 'w-2 bg-green-500 dark:bg-green-400' 
+                        : 'w-2 bg-gray-300 dark:bg-gray-600'
+                  }`}
+                />
+              ))}
+            </div>
+
             <button
               onClick={handleNext}
-              className="flex items-center px-6 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+              disabled={currentIndex === items.length - 1 && !progress[items[currentIndex].id]?.status_selesai}
+              className={`flex items-center px-6 py-2 text-sm font-semibold text-white border border-transparent rounded-xl transition-all shadow-lg hover:scale-105 active:scale-95 ${
+                currentIndex === items.length - 1
+                  ? 'bg-green-600 hover:bg-green-700 shadow-green-200 dark:shadow-none'
+                  : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200 dark:shadow-none'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
-              {currentIndex === items.length - 1 ? 'Selesai' : 'Selanjutnya'}
-              <ChevronRight className="w-4 h-4 ml-2" />
+              {currentIndex === items.length - 1 ? (
+                <>Selesai <CheckCircle className="w-5 h-5 ml-2" /></>
+              ) : (
+                <>Selanjutnya <ChevronRight className="w-5 h-5 ml-2" /></>
+              )}
             </button>
-          )}
+          </div>
         </div>
       </div>
     </div>

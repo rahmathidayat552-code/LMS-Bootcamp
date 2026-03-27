@@ -22,6 +22,8 @@ export interface UserProfile {
   role: Role;
   kelas_id?: string;
   username?: string;
+  no_wa?: string;
+  foto_url?: string;
 }
 
 interface AuthContextType {
