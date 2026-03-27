@@ -70,8 +70,17 @@ export default function Layout() {
 
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold">
-              {profile?.nama_lengkap?.charAt(0).toUpperCase() || 'U'}
+            <div className="w-10 h-10 rounded-full overflow-hidden bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold">
+              {profile?.foto_url ? (
+                <img 
+                  src={profile.foto_url} 
+                  alt={profile.nama_lengkap} 
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                profile?.nama_lengkap?.charAt(0).toUpperCase() || 'U'
+              )}
             </div>
             <div className="overflow-hidden">
               <p className="font-medium text-sm truncate">{profile?.nama_lengkap}</p>
