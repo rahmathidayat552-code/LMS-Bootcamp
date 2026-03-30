@@ -17,6 +17,9 @@ export default function Kelas() {
   const [kelasList, setKelasList] = useState<Kelas[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importTotal, setImportTotal] = useState(0);
   
   // View state: 'list' | 'form' | 'preview'
   const [view, setView] = useState<'list' | 'form' | 'preview'>('list');
@@ -152,11 +155,15 @@ export default function Kelas() {
   };
 
   const handleConfirmImport = async () => {
-    setLoading(true);
+    setIsImporting(true);
+    setImportProgress(0);
+    setImportTotal(previewData.length);
+
     let successCount = 0;
     let errorCount = 0;
 
-    for (const row of previewData) {
+    for (let i = 0; i < previewData.length; i++) {
+      const row = previewData[i];
       const tingkat = Number(row.tingkat);
       const nama_kelas = row.nama_kelas?.toString().trim();
 
@@ -174,6 +181,7 @@ export default function Kelas() {
       } else {
         errorCount++;
       }
+      setImportProgress(i + 1);
     }
 
     if (successCount > 0) {
@@ -183,6 +191,7 @@ export default function Kelas() {
       toast.error(`${errorCount} baris gagal diimpor karena data tidak valid.`);
     }
 
+    setIsImporting(false);
     setView('list');
     setPreviewData([]);
     fetchKelas();
@@ -289,19 +298,41 @@ export default function Kelas() {
                 setView('list');
                 setPreviewData([]);
               }}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              disabled={isImporting}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
             >
               Batal
             </button>
             <button 
               onClick={handleConfirmImport}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+              disabled={isImporting}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors disabled:opacity-50"
             >
               <Upload className="w-4 h-4" />
-              <span>Konfirmasi Import</span>
+              <span>{isImporting ? 'Mengimpor...' : 'Konfirmasi Import'}</span>
             </button>
           </div>
         </div>
+
+        {isImporting && (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Proses Import...</span>
+              <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                {Math.round((importProgress / importTotal) * 100)}%
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+              <div 
+                className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
+                style={{ width: `${(importProgress / importTotal) * 100}%` }}
+              ></div>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
+              Mengimpor {importProgress} dari {importTotal} data...
+            </p>
+          </div>
+        )}
 
         {/* Panduan Import */}
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 flex items-start space-x-3">
