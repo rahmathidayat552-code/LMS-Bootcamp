@@ -219,11 +219,19 @@ export default function ModulSiswaList() {
                     <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                       <Clock className="w-4 h-4 mr-1.5" />
                       <span>
-                        {modul.created_at?.toDate().toLocaleDateString('id-ID', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric'
-                        })}
+                        {modul.created_at && (
+                          typeof modul.created_at === 'string' 
+                            ? new Date(modul.created_at).toLocaleDateString('id-ID', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric'
+                              })
+                            : modul.created_at.toDate().toLocaleDateString('id-ID', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric'
+                              })
+                        )}
                       </span>
                     </div>
                     {isLocked ? (

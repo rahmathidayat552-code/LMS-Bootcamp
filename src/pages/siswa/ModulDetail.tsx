@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, getDocs, orderBy, setDoc, serverTimestamp, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
-import { BookOpen, FileText, Youtube, CheckCircle, ChevronLeft, ChevronRight, PlayCircle, FileUp, ListChecks, Download, ExternalLink as ExternalLinkIcon } from 'lucide-react';
+import { BookOpen, FileText, Youtube, CheckCircle, ChevronLeft, ChevronRight, PlayCircle, FileUp, ListChecks, Download, Lock, ExternalLink as ExternalLinkIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import 'react-quill-new/dist/quill.snow.css';
 import { logActivity } from '../../utils/activity';
@@ -721,21 +721,38 @@ export default function ModulSiswaDetail() {
             {items.map((item, idx) => {
               const isCompleted = progress[item.id]?.status_selesai;
               const isActive = currentIndex === idx;
+              const isAccessible = idx === 0 || progress[items[idx - 1].id]?.status_selesai;
               
               return (
                 <button
                   key={item.id}
-                  onClick={() => setCurrentIndex(idx)}
+                  onClick={() => {
+                    if (isAccessible) {
+                      setCurrentIndex(idx);
+                    } else {
+                      toast.error('Selesaikan tahapan sebelumnya terlebih dahulu');
+                    }
+                  }}
+                  disabled={!isAccessible}
                   className={`w-full flex items-center p-2 text-sm rounded-lg transition-colors text-left ${
                     isActive 
                       ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-medium' 
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                      : isAccessible
+                        ? 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                        : 'text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-60'
                   }`}
                 >
-                  <div className={`mr-3 flex-shrink-0 ${isCompleted ? 'text-green-500' : 'text-gray-400'}`}>
-                    {isCompleted ? <CheckCircle className="w-4 h-4" /> : <div className="w-4 h-4 rounded-full border-2 border-current" />}
+                  <div className={`mr-3 flex-shrink-0 ${isCompleted ? 'text-green-500' : isAccessible ? 'text-blue-400' : 'text-gray-400'}`}>
+                    {isCompleted ? (
+                      <CheckCircle className="w-4 h-4" />
+                    ) : isAccessible ? (
+                      <PlayCircle className="w-4 h-4" />
+                    ) : (
+                      <Lock className="w-4 h-4" />
+                    )}
                   </div>
                   <span className="truncate flex-1">{item.judul_item}</span>
+                  {!isAccessible && <Lock className="w-3 h-3 text-gray-400 ml-1" />}
                 </button>
               );
             })}
@@ -815,7 +832,10 @@ export default function ModulSiswaDetail() {
 
             <button
               onClick={handleNext}
-              disabled={currentIndex === items.length - 1 && !progress[items[currentIndex].id]?.status_selesai}
+              disabled={
+                (currentItem.tipe_item === 'KUIS' || currentItem.tipe_item === 'TUGAS') && 
+                !progress[currentItem.id]?.status_selesai
+              }
               className={`flex items-center px-6 py-2 text-sm font-semibold text-white border border-transparent rounded-xl transition-all shadow-lg hover:scale-105 active:scale-95 ${
                 currentIndex === items.length - 1
                   ? 'bg-green-600 hover:bg-green-700 shadow-green-200 dark:shadow-none'
