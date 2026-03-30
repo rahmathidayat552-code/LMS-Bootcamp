@@ -33,24 +33,28 @@ export default function ModulSiswaList() {
       try {
         // Fetch Moduls
         const modulsRef = collection(db, 'moduls');
-        const q = query(
-          modulsRef,
-          where('is_published', '==', true),
-          orderBy('created_at', 'desc')
-        );
+        const q = query(modulsRef);
 
         const snapshot = await getDocs(q);
-        const fetchedModuls = snapshot.docs.map(doc => ({
+        let fetchedModuls = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         })) as Modul[];
+        
+        // Filter published modules
+        fetchedModuls = fetchedModuls.filter(m => m.is_published === true || m.is_published === 'true' as any);
+        
+        // Sort in memory
+        fetchedModuls.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 
         // Filter moduls based on student's class or individual targeting
         const filteredModuls = fetchedModuls.filter(modul => {
           if (modul.tipe_target === 'KELAS') {
-            return modul.target_kelas_ids.includes(profile.kelas_id || '');
+            const kelasIds = Array.isArray(modul.target_kelas_ids) ? modul.target_kelas_ids : [];
+            return kelasIds.includes(profile.kelas_id || '');
           } else if (modul.tipe_target === 'SISWA') {
-            return modul.target_siswa_ids.includes(profile.uid);
+            const siswaIds = Array.isArray(modul.target_siswa_ids) ? modul.target_siswa_ids : [];
+            return siswaIds.includes(profile.uid);
           }
           return false;
         });

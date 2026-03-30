@@ -79,9 +79,10 @@ export default function ModulSiswaDetail() {
 
         // Fetch Items
         const itemsRef = collection(db, 'modul_items');
-        const q = query(itemsRef, where('modul_id', '==', id), orderBy('urutan', 'asc'));
+        const q = query(itemsRef, where('modul_id', '==', id));
         const snapshot = await getDocs(q);
         const fetchedItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as ModulItem[];
+        fetchedItems.sort((a, b) => a.urutan - b.urutan);
         setItems(fetchedItems);
 
         // Fetch Progress
