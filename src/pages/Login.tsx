@@ -37,6 +37,15 @@ export default function Login() {
       // but we can rely on the fact that Google login is mostly for ADMIN.
       // For SISWA, email login is used.
     } catch (err: any) {
+      if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
+        setLoading(false);
+        return;
+      }
+      if (err.code === 'auth/popup-blocked') {
+        setError('Popup diblokir oleh browser. Silakan izinkan popup untuk situs ini.');
+        setLoading(false);
+        return;
+      }
       setError(err.message || 'Gagal masuk dengan Google');
       setLoading(false);
     }
