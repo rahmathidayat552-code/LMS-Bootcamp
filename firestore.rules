@@ -129,11 +129,12 @@ service cloud.firestore {
              data.guru_id is string && data.guru_id.size() > 0 &&
              data.mata_pelajaran is string && data.mata_pelajaran.size() > 0 && data.mata_pelajaran.size() < 100 &&
              data.judul_modul is string && data.judul_modul.size() > 0 && data.judul_modul.size() < 150 &&
-             (!('deskripsi' in data) || (data.deskripsi is string && data.deskripsi.size() < 2000)) &&
+             (!('deskripsi' in data) || data.deskripsi == null || (data.deskripsi is string && data.deskripsi.size() < 2000)) &&
              data.tipe_target in ['KELAS', 'SISWA'] &&
-             (!('target_kelas_ids' in data) || (data.target_kelas_ids is list && data.target_kelas_ids.size() < 100)) &&
-             (!('target_siswa_ids' in data) || (data.target_siswa_ids is list && data.target_siswa_ids.size() < 100)) &&
-             (!('ikon' in data) || (data.ikon is string && data.ikon.size() < 500000)) &&
+             (!('target_kelas_ids' in data) || data.target_kelas_ids == null || (data.target_kelas_ids is list && data.target_kelas_ids.size() < 100)) &&
+             (!('target_siswa_ids' in data) || data.target_siswa_ids == null || (data.target_siswa_ids is list && data.target_siswa_ids.size() < 100)) &&
+             (!('ikon' in data) || data.ikon == null || (data.ikon is string && data.ikon.size() < 500000)) &&
+             (!('viewers' in data) || data.viewers == null || (data.viewers is list && data.viewers.size() < 10000)) &&
              data.is_published is bool;
     }
 
@@ -142,8 +143,8 @@ service cloud.firestore {
              data.modul_id is string && data.modul_id.size() > 0 &&
              data.tipe_item in ['MATERI', 'PDF', 'YOUTUBE', 'KUIS', 'TUGAS'] &&
              data.judul_item is string && data.judul_item.size() > 0 && data.judul_item.size() < 150 &&
-             (!('deskripsi' in data) || (data.deskripsi is string && data.deskripsi.size() < 5000)) &&
-             (!('konten' in data) || (data.konten is string && data.konten.size() < 50000)) &&
+             (!('deskripsi' in data) || data.deskripsi == null || (data.deskripsi is string && data.deskripsi.size() < 5000)) &&
+             (!('konten' in data) || data.konten == null || (data.konten is string && data.konten.size() < 5000000)) &&
              data.urutan is number && data.urutan > 0;
     }
 
@@ -164,12 +165,12 @@ service cloud.firestore {
              data.siswa_id is string && data.siswa_id.size() > 0 &&
              data.modul_item_id is string && data.modul_item_id.size() > 0 &&
              data.status_selesai is bool &&
-             (!('modul_id' in data) || (data.modul_id is string && data.modul_id.size() > 0)) &&
-             (!('nilai' in data) || (data.nilai is number && data.nilai >= 0 && data.nilai <= 100)) &&
-             (!('file_submission' in data) || (data.file_submission is string && data.file_submission.size() < 1000)) &&
-             (!('link_tugas' in data) || (data.link_tugas is string && data.link_tugas.size() < 1000)) &&
-             (!('jawaban' in data) || data.jawaban is map) &&
-             (!('selesai_pada' in data) || data.selesai_pada is timestamp);
+             (!('modul_id' in data) || data.modul_id == null || (data.modul_id is string && data.modul_id.size() > 0)) &&
+             (!('nilai' in data) || data.nilai == null || (data.nilai is number && data.nilai >= 0 && data.nilai <= 100)) &&
+             (!('file_submission' in data) || data.file_submission == null || (data.file_submission is string && data.file_submission.size() < 1000)) &&
+             (!('link_tugas' in data) || data.link_tugas == null || (data.link_tugas is string && data.link_tugas.size() < 1000)) &&
+             (!('jawaban' in data) || data.jawaban == null || data.jawaban is map) &&
+             (!('selesai_pada' in data) || data.selesai_pada == null || data.selesai_pada is timestamp);
     }
 
     function isValidMasterUser(data) {
@@ -180,6 +181,17 @@ service cloud.firestore {
              data.tanggal_lahir is string && data.tanggal_lahir.size() > 0 && data.tanggal_lahir.size() < 20 &&
              data.is_registered is bool &&
              (!('kelas_id' in data) || (data.kelas_id is string && data.kelas_id.size() < 50));
+    }
+
+    function isValidActivityLog(data) {
+      return hasRequiredFields(['user_id', 'nama_siswa', 'kelas_id', 'aksi']) &&
+             data.user_id is string && data.user_id.size() > 0 &&
+             data.nama_siswa is string && data.nama_siswa.size() > 0 &&
+             data.kelas_id is string && data.kelas_id.size() > 0 &&
+             data.aksi is string && data.aksi.size() > 0 && data.aksi.size() < 500 &&
+             (!('modul_id' in data) || data.modul_id == null || (data.modul_id is string && data.modul_id.size() > 0)) &&
+             (!('modul_judul' in data) || data.modul_judul == null || (data.modul_judul is string && data.modul_judul.size() > 0)) &&
+             (!('created_at' in data) || data.created_at is timestamp);
     }
 
     // ===============================================================
@@ -218,7 +230,8 @@ service cloud.firestore {
     match /moduls/{modulId} {
       allow read: if isAuthenticated();
       allow create: if (isAdmin() || isGuru()) && isValidModul(request.resource.data);
-      allow update: if (isAdmin() || (isGuru() && resource.data.guru_id == request.auth.uid)) && isValidModul(request.resource.data);
+      allow update: if ((isAdmin() || (isGuru() && resource.data.guru_id == request.auth.uid)) && isValidModul(request.resource.data))
+                    || (isSiswa() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewers']) && request.resource.data.get('viewers', []).hasAll(resource.data.get('viewers', [])) && request.auth.uid in request.resource.data.get('viewers', []));
       allow delete: if isAdmin() || (isGuru() && resource.data.guru_id == request.auth.uid);
     }
 
@@ -241,6 +254,14 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isValidProgresSiswa(request.resource.data) && (isAdmin() || isGuru() || request.resource.data.siswa_id == request.auth.uid);
       allow update: if isAuthenticated() && isValidProgresSiswa(request.resource.data) && (isAdmin() || isGuru() || (resource.data.siswa_id == request.auth.uid && request.resource.data.siswa_id == request.auth.uid));
       allow delete: if isAdmin() || isGuru();
+    }
+
+    match /activity_logs/{logId} {
+      // Guru and Admin can read all activity logs
+      allow read: if isAuthenticated() && (isAdmin() || isGuru());
+      // Siswa can create their own activity logs
+      allow create: if isAuthenticated() && isValidActivityLog(request.resource.data) && request.resource.data.user_id == request.auth.uid;
+      allow update, delete: if false; // Activity logs are append-only
     }
   }
 }

@@ -15,6 +15,7 @@ interface Modul {
   is_published: boolean;
   ikon?: string;
   created_at: string;
+  viewers?: string[];
 }
 
 export default function ModulList() {
@@ -215,9 +216,15 @@ export default function ModulList() {
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                   {modul.mata_pelajaran}
                 </p>
-                <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
-                  <Users className="w-4 h-4 mr-1.5" />
-                  <span>Target: {modul.tipe_target === 'KELAS' ? 'Kelas' : 'Siswa Tertentu'}</span>
+                <div className="flex flex-col space-y-2">
+                  <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                    <Users className="w-4 h-4 mr-1.5" />
+                    <span>Target: {modul.tipe_target === 'KELAS' ? 'Kelas' : 'Siswa Tertentu'}</span>
+                  </div>
+                  <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                    <Eye className="w-4 h-4 mr-1.5" />
+                    <span>Diakses oleh: <span className="font-semibold text-gray-900 dark:text-white">{modul.viewers?.length || 0}</span> Siswa</span>
+                  </div>
                 </div>
               </div>
               <div className="bg-gray-50 dark:bg-gray-800/50 px-6 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">

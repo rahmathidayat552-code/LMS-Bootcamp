@@ -90,6 +90,21 @@
         "selesai_pada": { "type": "string", "format": "date-time" }
       },
       "required": ["siswa_id", "modul_item_id", "status_selesai"]
+    },
+    "ActivityLog": {
+      "title": "Activity Log",
+      "description": "Represents a student's activity",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "nama_siswa": { "type": "string" },
+        "kelas_id": { "type": "string" },
+        "aksi": { "type": "string" },
+        "modul_id": { "type": "string" },
+        "modul_judul": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["user_id", "nama_siswa", "kelas_id", "aksi"]
     }
   },
   "firestore": {
@@ -116,6 +131,10 @@
     "progres_siswa/{progresId}": {
       "schema": { "$ref": "#/entities/ProgresSiswa" },
       "description": "Stores student progress"
+    },
+    "activity_logs/{logId}": {
+      "schema": { "$ref": "#/entities/ActivityLog" },
+      "description": "Stores student activity logs"
     }
   }
 }

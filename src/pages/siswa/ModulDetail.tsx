@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, collection, query, where, getDocs, orderBy, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, orderBy, setDoc, serverTimestamp, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { BookOpen, FileText, Youtube, CheckCircle, ChevronLeft, ChevronRight, PlayCircle, FileUp, ListChecks, Download, ExternalLink as ExternalLinkIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import 'react-quill-new/dist/quill.snow.css';
+import { logActivity } from '../../utils/activity';
 
 interface ModulItem {
   id: string;
@@ -64,6 +65,17 @@ export default function ModulSiswaDetail() {
         }
         const currentModulData = modulDoc.data();
         setModul({ id: modulDoc.id, ...currentModulData });
+
+        // Add user to viewers if not already present
+        if (!currentModulData.viewers?.includes(profile.uid)) {
+          try {
+            await updateDoc(doc(db, 'moduls', id), {
+              viewers: arrayUnion(profile.uid)
+            });
+          } catch (e) {
+            console.error('Error updating viewers:', e);
+          }
+        }
 
         // Fetch Items
         const itemsRef = collection(db, 'modul_items');
@@ -164,8 +176,20 @@ export default function ModulSiswaDetail() {
         setTugasLink('');
         setTugasFile(null);
       }
+
+      // Log activity when opening an item
+      if (profile) {
+        logActivity(
+          profile.uid,
+          profile.nama_lengkap,
+          profile.kelas_id,
+          `Membuka materi: ${items[currentIndex].judul_item}`,
+          id,
+          modul?.judul_modul
+        );
+      }
     }
-  }, [currentIndex, items, progress]);
+  }, [currentIndex, items, progress, profile, id, modul]);
 
   const markAsCompleted = async () => {
     if (!profile || !id || !items[currentIndex]) return;
@@ -187,6 +211,15 @@ export default function ModulSiswaDetail() {
           ...progressData
         }
       }));
+
+      logActivity(
+        profile.uid,
+        profile.nama_lengkap,
+        profile.kelas_id,
+        `Menyelesaikan materi: ${items[currentIndex].judul_item}`,
+        id,
+        modul?.judul_modul
+      );
     } catch (error) {
       console.error('Error marking as completed:', error);
     }
@@ -246,6 +279,15 @@ export default function ModulSiswaDetail() {
         [items[currentIndex].id]: progressData
       }));
       
+      logActivity(
+        profile!.uid,
+        profile!.nama_lengkap,
+        profile!.kelas_id,
+        `Mengerjakan kuis: ${items[currentIndex].judul_item} (Nilai: ${finalScore})`,
+        id,
+        modul?.judul_modul
+      );
+
       toast.success(`Kuis selesai! Nilai Anda: ${finalScore}`);
     } catch (error) {
       console.error('Error saving kuis progress:', error);
@@ -324,6 +366,15 @@ export default function ModulSiswaDetail() {
         [items[currentIndex].id]: progressData
       }));
       
+      logActivity(
+        profile!.uid,
+        profile!.nama_lengkap,
+        profile!.kelas_id,
+        `Mengumpulkan tugas: ${items[currentIndex].judul_item}`,
+        id,
+        modul?.judul_modul
+      );
+
       toast.success('Tugas berhasil dikumpulkan');
       handleNext();
     } catch (error) {

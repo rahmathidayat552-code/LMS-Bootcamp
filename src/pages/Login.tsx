@@ -3,6 +3,9 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { BookOpen, LogIn, Mail, Lock } from 'lucide-react';
 import { toast } from 'sonner';
+import { logActivity } from '../utils/activity';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../firebase';
 
 export default function Login() {
   const { loginWithGoogle, loginWithEmail, user, profile } = useAuth();
@@ -28,7 +31,11 @@ export default function Login() {
       setLoading(true);
       await loginWithGoogle();
       toast.success('Berhasil login!');
-      // The redirect will happen automatically due to the useEffect above
+      
+      // Log activity if profile is available (handled in useEffect or next render)
+      // We can't easily get profile here immediately without refactoring, 
+      // but we can rely on the fact that Google login is mostly for ADMIN.
+      // For SISWA, email login is used.
     } catch (err: any) {
       setError(err.message || 'Gagal masuk dengan Google');
       setLoading(false);
@@ -42,6 +49,26 @@ export default function Login() {
       setLoading(true);
       await loginWithEmail(email, password);
       toast.success('Berhasil login!');
+      
+      // We don't have the profile here immediately, but we can fetch it or just let the 
+      // AuthContext handle the redirect. To log activity properly, we might need the profile.
+      // Let's just rely on the redirect for now, and maybe log activity from a useEffect 
+      // that detects a fresh login. Or we can fetch the user doc here.
+      if (auth.currentUser) {
+        const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          if (data.role === 'SISWA') {
+            logActivity(
+              auth.currentUser.uid,
+              data.nama_lengkap,
+              data.kelas_id,
+              'Login ke sistem'
+            );
+          }
+        }
+      }
+
     } catch (err: any) {
       setError('Email atau password salah. Pastikan Anda sudah registrasi.');
       setLoading(false);
