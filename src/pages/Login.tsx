@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { BookOpen, LogIn, Mail, Lock } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function Login() {
   const { loginWithGoogle, loginWithEmail, user, profile } = useAuth();
@@ -26,6 +27,7 @@ export default function Login() {
       setError('');
       setLoading(true);
       await loginWithGoogle();
+      toast.success('Berhasil login!');
       // The redirect will happen automatically due to the useEffect above
     } catch (err: any) {
       setError(err.message || 'Gagal masuk dengan Google');
@@ -39,6 +41,7 @@ export default function Login() {
       setError('');
       setLoading(true);
       await loginWithEmail(email, password);
+      toast.success('Berhasil login!');
     } catch (err: any) {
       setError('Email atau password salah. Pastikan Anda sudah registrasi.');
       setLoading(false);

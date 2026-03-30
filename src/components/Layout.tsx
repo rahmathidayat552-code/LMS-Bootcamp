@@ -3,6 +3,8 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { BookOpen, Users, Settings, LogOut, Menu, X, Moon, Sun, Monitor, LayoutDashboard, FileCheck } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { toast } from 'sonner';
 
 export default function Layout() {
   const { profile, logout } = useAuth();
@@ -10,6 +12,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -32,7 +35,9 @@ export default function Layout() {
   };
 
   const handleLogout = async () => {
+    setIsLogoutModalOpen(false);
     await logout();
+    toast.success('Berhasil logout!');
     navigate('/login');
   };
 
@@ -116,7 +121,7 @@ export default function Layout() {
 
         <div className="p-4 border-t border-gray-200 dark:border-gray-700">
           <button
-            onClick={handleLogout}
+            onClick={() => setIsLogoutModalOpen(true)}
             className="flex items-center space-x-3 px-3 py-2.5 w-full rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
           >
             <LogOut className="w-5 h-5 flex-shrink-0" />
@@ -159,6 +164,45 @@ export default function Layout() {
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
+
+      {/* Logout Confirmation Modal */}
+      <AnimatePresence>
+        {isLogoutModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.5 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.5 }}
+              transition={{ type: "spring", bounce: 0.5, duration: 0.4 }}
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm p-6"
+            >
+              <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 dark:bg-red-900/30 rounded-full mb-4">
+                <LogOut className="w-6 h-6 text-red-600 dark:text-red-400" />
+              </div>
+              <h3 className="text-lg font-bold text-center text-gray-900 dark:text-white mb-2">
+                Konfirmasi Keluar
+              </h3>
+              <p className="text-center text-gray-600 dark:text-gray-400 mb-6">
+                Apakah Anda yakin ingin keluar dari aplikasi?
+              </p>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setIsLogoutModalOpen(false)}
+                  className="flex-1 py-2 px-4 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg font-medium transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Ya, Keluar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
