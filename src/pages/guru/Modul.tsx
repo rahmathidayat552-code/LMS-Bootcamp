@@ -6,6 +6,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { BookOpen, Plus, Edit, Trash2, Eye, Users, Copy, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
+import { formatDate } from '../../utils/dateUtils';
 
 interface Modul {
   id: string;
@@ -207,7 +208,7 @@ export default function ModulList() {
                     {modul.is_published ? 'Dipublikasikan' : 'Draft'}
                   </span>
                   <span className="text-xs text-gray-500 dark:text-gray-400">
-                    {new Date(modul.created_at).toLocaleDateString('id-ID')}
+                    {formatDate(modul.created_at)}
                   </span>
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 line-clamp-2">

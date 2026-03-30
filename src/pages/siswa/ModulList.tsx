@@ -4,6 +4,7 @@ import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { BookOpen, Clock, CheckCircle, ChevronRight, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { formatDate } from '../../utils/dateUtils';
 
 interface Modul {
   id: string;
@@ -219,19 +220,11 @@ export default function ModulSiswaList() {
                     <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                       <Clock className="w-4 h-4 mr-1.5" />
                       <span>
-                        {modul.created_at && (
-                          typeof modul.created_at === 'string' 
-                            ? new Date(modul.created_at).toLocaleDateString('id-ID', {
-                                day: 'numeric',
-                                month: 'short',
-                                year: 'numeric'
-                              })
-                            : modul.created_at.toDate().toLocaleDateString('id-ID', {
-                                day: 'numeric',
-                                month: 'short',
-                                year: 'numeric'
-                              })
-                        )}
+                        {modul.created_at && formatDate(modul.created_at, {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
                       </span>
                     </div>
                     {isLocked ? (

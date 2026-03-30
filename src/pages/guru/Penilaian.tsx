@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, doc, updateDoc, getDoc, orderBy } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
-import { CheckCircle, Clock, Search, Filter, ExternalLink, Save, User, BookOpen } from 'lucide-react';
+import { CheckCircle, Clock, Search, Filter, ExternalLink, Save, User, BookOpen, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatDateTime } from '../../utils/dateUtils';
 
 interface Submission {
   id: string;
@@ -166,6 +167,7 @@ export default function Penilaian() {
               <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700">
                 <th className="px-6 py-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Siswa</th>
                 <th className="px-6 py-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Modul / Item</th>
+                <th className="px-6 py-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Tgl Kumpul</th>
                 <th className="px-6 py-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Tugas</th>
                 <th className="px-6 py-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Status</th>
                 <th className="px-6 py-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Nilai</th>
@@ -186,6 +188,18 @@ export default function Penilaian() {
                   <td className="px-6 py-4">
                     <div className="text-sm text-gray-900 dark:text-white font-medium">{s.modul_judul}</div>
                     <div className="text-xs text-gray-500 dark:text-gray-400">{s.item_judul}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
+                      <Calendar className="w-3.5 h-3.5 mr-1.5" />
+                      {formatDateTime(s.selesai_pada, {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-col space-y-1">
