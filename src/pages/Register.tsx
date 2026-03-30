@@ -94,7 +94,7 @@ export default function Register() {
         role: masterData.role,
         username: masterData.username,
         kelas_id: masterData.kelas_id || '',
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString() // ISO string for DB
       };
 
       await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);

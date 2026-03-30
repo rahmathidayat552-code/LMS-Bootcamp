@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
+import { formatFullDate } from '../../utils/dateUtils';
 import * as XLSX from 'xlsx';
 import { Upload, Plus, Trash2, Search, Edit2, X, Download, ArrowLeft, CheckCircle, AlertCircle, Info } from 'lucide-react';
 import { toast } from 'sonner';
@@ -141,7 +142,7 @@ export default function Users() {
         username: formData.username,
         tanggal_lahir: formData.tanggal_lahir,
         kelas_id: formData.role === 'SISWA' ? formData.kelas_id : '',
-        created_at: new Date().toISOString(),
+        created_at: new Date().toISOString(), // Keep ISO string for DB, but we can use dateUtils for display
         is_registered: editingId ? (users.find(u => u.id === editingId)?.is_registered || false) : false
       };
 
@@ -200,7 +201,7 @@ export default function Users() {
             tanggal_lahir: row.tanggal_lahir,
             kelas_id: row.kelas_id || '',
             is_registered: false,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString() // ISO string for DB
           }, { merge: true });
           successCount++;
         } catch (error) {

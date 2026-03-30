@@ -39,3 +39,17 @@ export const formatTime = (date: Date | string | any, options: Intl.DateTimeForm
     ...options
   });
 };
+
+export const formatFullDate = (date: Date | string | any) => {
+  if (!date) return '-';
+  const d = typeof date === 'string' ? new Date(date) : (date.toDate ? date.toDate() : new Date(date));
+  
+  return d.toLocaleString('id-ID', {
+    timeZone: 'Asia/Makassar',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};

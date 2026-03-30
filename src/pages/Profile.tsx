@@ -6,9 +6,10 @@ import { toast } from 'sonner';
 import { User, Phone, Camera, Save, Loader2 } from 'lucide-react';
 
 export default function Profile() {
-  const { profile, user } = useAuth();
+  const { profile, user, refreshProfile } = useAuth();
   const [noWa, setNoWa] = useState('');
   const [fotoUrl, setFotoUrl] = useState('');
+  const [kelasName, setKelasName] = useState('');
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -16,6 +17,20 @@ export default function Profile() {
     if (profile) {
       setNoWa(profile.no_wa || '');
       setFotoUrl(profile.foto_url || '');
+      
+      if (profile.role === 'SISWA' && profile.kelas_id) {
+        const fetchKelas = async () => {
+          try {
+            const docSnap = await getDoc(doc(db, 'kelas', profile.kelas_id));
+            if (docSnap.exists()) {
+              setKelasName(docSnap.data().nama_kelas);
+            }
+          } catch (error) {
+            console.error('Error fetching kelas:', error);
+          }
+        };
+        fetchKelas();
+      }
     }
   }, [profile]);
 
@@ -52,11 +67,10 @@ export default function Profile() {
       await updateDoc(doc(db, 'users', profile.uid), {
         no_wa: noWa,
         foto_url: fotoUrl,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString() // ISO string for DB
       });
+      await refreshProfile();
       toast.success('Profil berhasil diperbarui');
-      // Refresh page to show new profile data from context
-      window.location.reload();
     } catch (error) {
       console.error('Error updating profile:', error);
       toast.error('Gagal memperbarui profil');
@@ -127,8 +141,8 @@ export default function Profile() {
             {profile?.role === 'SISWA' && (
               <div className="space-y-1">
                 <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Kelas</label>
-                <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500">
-                  {profile?.kelas_id || '-'}
+                <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white font-medium">
+                  {kelasName || profile?.kelas_id || '-'}
                 </div>
               </div>
             )}

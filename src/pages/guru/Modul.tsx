@@ -110,7 +110,7 @@ export default function ModulList() {
           ...originalData,
           judul_modul: originalData.judul_modul + suffix,
           prasyarat_id: newPrasyaratId,
-          created_at: new Date().toISOString(),
+          created_at: new Date().toISOString(), // ISO string for DB
           is_published: false // Always copy as draft
         };
         
@@ -125,7 +125,7 @@ export default function ModulList() {
           batch.set(newItemRef, {
             ...itemDoc.data(),
             modul_id: newModulId,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString() // ISO string for DB
           });
         });
         

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { BookOpen, Clock, CheckCircle, ChevronRight, Lock } from 'lucide-react';
@@ -25,6 +25,7 @@ export default function ModulSiswaList() {
   const { profile } = useAuth();
   const [moduls, setModuls] = useState<Modul[]>([]);
   const [progress, setProgress] = useState<Record<string, number>>({});
+  const [kelasName, setKelasName] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,6 +33,14 @@ export default function ModulSiswaList() {
       if (!profile) return;
 
       try {
+        // Fetch Kelas Name if exists
+        if (profile.kelas_id) {
+          const kSnap = await getDoc(doc(db, 'kelas', profile.kelas_id));
+          if (kSnap.exists()) {
+            setKelasName(kSnap.data().nama_kelas);
+          }
+        }
+
         // Fetch Moduls
         const modulsRef = collection(db, 'moduls');
         const q = query(modulsRef);
@@ -43,20 +52,36 @@ export default function ModulSiswaList() {
         })) as Modul[];
         
         // Filter published modules
-        fetchedModuls = fetchedModuls.filter(m => m.is_published === true || m.is_published === 'true' as any);
+        fetchedModuls = fetchedModuls.filter(m => {
+          // Handle both boolean and string "true" for is_published
+          const isPublished = m.is_published === true || String(m.is_published) === 'true';
+          return isPublished;
+        });
         
         // Sort in memory
-        fetchedModuls.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+        fetchedModuls.sort((a, b) => {
+          const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return dateB - dateA;
+        });
 
         // Filter moduls based on student's class or individual targeting
         const filteredModuls = fetchedModuls.filter(modul => {
+          const studentKelasId = (profile.kelas_id || '').trim();
+          const studentUid = profile.uid;
+
           if (modul.tipe_target === 'KELAS') {
-            const kelasIds = Array.isArray(modul.target_kelas_ids) ? modul.target_kelas_ids : [];
-            return kelasIds.includes(profile.kelas_id || '');
+            const targetKelasIds = Array.isArray(modul.target_kelas_ids) 
+              ? modul.target_kelas_ids.map(id => String(id).trim()) 
+              : [];
+            return targetKelasIds.includes(studentKelasId);
           } else if (modul.tipe_target === 'SISWA') {
-            const siswaIds = Array.isArray(modul.target_siswa_ids) ? modul.target_siswa_ids : [];
-            return siswaIds.includes(profile.uid);
+            const targetSiswaIds = Array.isArray(modul.target_siswa_ids) 
+              ? modul.target_siswa_ids.map(id => String(id).trim()) 
+              : [];
+            return targetSiswaIds.includes(studentUid);
           }
+          // Default to false if tipe_target is unknown or missing
           return false;
         });
 
@@ -126,6 +151,12 @@ export default function ModulSiswaList() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Modul Belajar</h1>
           <p className="text-gray-500 dark:text-gray-400 mt-1">Daftar modul yang ditugaskan untuk Anda</p>
         </div>
+        <div className="flex items-center space-x-2 bg-white dark:bg-gray-800 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className={`w-2 h-2 rounded-full ${profile?.kelas_id ? 'bg-green-500' : 'bg-red-500'}`}></div>
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            {profile?.kelas_id ? `Kelas: ${kelasName || profile.kelas_id}` : 'Kelas Belum Teratur'}
+          </span>
+        </div>
       </div>
 
       {moduls.length === 0 ? (
@@ -133,10 +164,19 @@ export default function ModulSiswaList() {
           <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/20 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
             <BookOpen className="w-8 h-8" />
           </div>
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Belum Ada Modul</h3>
-          <p className="text-gray-500 dark:text-gray-400 max-w-sm mx-auto">
-            Saat ini belum ada modul belajar yang ditugaskan untuk Anda.
+          <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Belum ada modul</h3>
+          <p className="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
+            {profile?.kelas_id 
+              ? "Belum ada modul yang dipublikasikan untuk kelas Anda saat ini. Silakan cek kembali nanti."
+              : "Anda belum terdaftar di kelas manapun. Silakan hubungi admin atau guru untuk mendaftarkan Anda ke dalam kelas agar dapat melihat modul belajar."}
           </p>
+          {!profile?.kelas_id && (
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-100 dark:border-yellow-800 rounded-xl p-4 max-w-md mx-auto text-left shadow-sm">
+              <p className="text-sm text-yellow-800 dark:text-yellow-300">
+                <span className="font-bold">Penting:</span> Modul belajar biasanya ditargetkan berdasarkan kelas. Tanpa kelas, Anda tidak akan melihat modul apapun kecuali ditargetkan secara personal.
+              </p>
+            </div>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

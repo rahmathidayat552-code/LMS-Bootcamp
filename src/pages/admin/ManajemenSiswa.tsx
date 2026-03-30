@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, query, where, doc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { Search, Trash2, User, Phone, Mail, BookOpen } from 'lucide-react';
@@ -26,6 +26,13 @@ export default function ManajemenSiswa() {
   const [kelasList, setKelasList] = useState<Kelas[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingStudent, setEditingStudent] = useState<UserProfile | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    nama_lengkap: '',
+    kelas_id: '',
+    no_wa: ''
+  });
 
   const fetchData = async () => {
     try {
@@ -50,6 +57,52 @@ export default function ManajemenSiswa() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const handleEdit = (student: UserProfile) => {
+    setEditingStudent(student);
+    setEditFormData({
+      nama_lengkap: student.nama_lengkap,
+      kelas_id: student.kelas_id || '',
+      no_wa: student.no_wa || ''
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+
+    try {
+      setLoading(true);
+      const userRef = doc(db, 'users', editingStudent.uid);
+      await updateDoc(userRef, {
+        nama_lengkap: editFormData.nama_lengkap,
+        kelas_id: editFormData.kelas_id,
+        no_wa: editFormData.no_wa
+      });
+
+      // Also update master_users if username exists
+      if (editingStudent.username) {
+        const masterRef = doc(db, 'master_users', editingStudent.username);
+        const masterDoc = await getDoc(masterRef);
+        if (masterDoc.exists()) {
+          await updateDoc(masterRef, {
+            nama_lengkap: editFormData.nama_lengkap,
+            kelas_id: editFormData.kelas_id
+          });
+        }
+      }
+
+      toast.success('Data siswa berhasil diperbarui');
+      setIsEditModalOpen(false);
+      fetchData();
+    } catch (error) {
+      console.error('Error updating student:', error);
+      toast.error('Gagal memperbarui data siswa');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleDelete = async (uid: string) => {
     if (window.confirm('Apakah Anda yakin ingin menghapus akun siswa ini? Tindakan ini tidak dapat dibatalkan.')) {
@@ -157,13 +210,22 @@ export default function ManajemenSiswa() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button 
-                        onClick={() => handleDelete(student.uid)}
-                        className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 transition-colors"
-                        title="Hapus Akun"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
+                      <div className="flex items-center space-x-3">
+                        <button 
+                          onClick={() => handleEdit(student)}
+                          className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                          title="Edit Data"
+                        >
+                          <User className="w-5 h-5" />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(student.uid)}
+                          className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+                          title="Hapus Akun"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -172,6 +234,67 @@ export default function ManajemenSiswa() {
           </table>
         </div>
       </div>
+
+      {/* Edit Modal */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="p-6 border-b border-gray-100 dark:border-gray-700">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">Edit Data Siswa</h3>
+            </div>
+            <form onSubmit={handleUpdate} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nama Lengkap</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.nama_lengkap}
+                  onChange={(e) => setEditFormData({ ...editFormData, nama_lengkap: e.target.value })}
+                  className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Kelas</label>
+                <select
+                  value={editFormData.kelas_id}
+                  onChange={(e) => setEditFormData({ ...editFormData, kelas_id: e.target.value })}
+                  className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="">Pilih Kelas</option>
+                  {kelasList.map(k => (
+                    <option key={k.id} value={k.id}>{k.nama_kelas}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">No. WhatsApp</label>
+                <input
+                  type="text"
+                  value={editFormData.no_wa}
+                  onChange={(e) => setEditFormData({ ...editFormData, no_wa: e.target.value })}
+                  className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div className="flex space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Menyimpan...' : 'Simpan Perubahan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

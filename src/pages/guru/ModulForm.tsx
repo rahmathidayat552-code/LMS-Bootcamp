@@ -419,7 +419,7 @@ export default function ModulForm() {
         ikon,
         prasyarat_id: prasyaratId,
         is_published: publish,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString() // ISO string for DB
       };
 
       if (isEditing) {
@@ -446,7 +446,7 @@ export default function ModulForm() {
           deskripsi: item.deskripsi,
           konten: item.konten,
           urutan: index + 1,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString() // ISO string for DB
         });
       });
 

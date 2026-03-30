@@ -734,15 +734,23 @@ export default function ModulSiswaDetail() {
                     }
                   }}
                   disabled={!isAccessible}
-                  className={`w-full flex items-center p-2 text-sm rounded-lg transition-colors text-left ${
+                  className={`w-full flex items-center p-3 text-sm rounded-xl transition-all text-left group ${
                     isActive 
-                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-medium' 
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-200 dark:shadow-none font-semibold scale-[1.02]' 
                       : isAccessible
-                        ? 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                        : 'text-gray-400 dark:text-gray-600 cursor-not-allowed opacity-60'
+                        ? 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400'
+                        : 'text-gray-400 dark:text-gray-600 cursor-not-allowed bg-gray-50 dark:bg-gray-800/50'
                   }`}
                 >
-                  <div className={`mr-3 flex-shrink-0 ${isCompleted ? 'text-green-500' : isAccessible ? 'text-blue-400' : 'text-gray-400'}`}>
+                  <div className={`mr-3 flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                    isActive
+                      ? 'bg-white/20 text-white'
+                      : isCompleted 
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-500' 
+                        : isAccessible 
+                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-500' 
+                          : 'bg-gray-200 dark:bg-gray-700 text-gray-400'
+                  }`}>
                     {isCompleted ? (
                       <CheckCircle className="w-4 h-4" />
                     ) : isAccessible ? (
@@ -751,8 +759,17 @@ export default function ModulSiswaDetail() {
                       <Lock className="w-4 h-4" />
                     )}
                   </div>
-                  <span className="truncate flex-1">{item.judul_item}</span>
-                  {!isAccessible && <Lock className="w-3 h-3 text-gray-400 ml-1" />}
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate">{item.judul_item}</div>
+                    <div className={`text-[10px] uppercase tracking-wider mt-0.5 ${isActive ? 'text-blue-100' : 'text-gray-400'}`}>
+                      {item.tipe_item}
+                    </div>
+                  </div>
+                  {!isAccessible && (
+                    <div className="ml-2">
+                      <Lock className="w-3.5 h-3.5 text-gray-400" />
+                    </div>
+                  )}
                 </button>
               );
             })}

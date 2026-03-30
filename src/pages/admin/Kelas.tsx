@@ -108,7 +108,7 @@ export default function Kelas() {
       const kelasData = {
         nama_kelas: formData.nama_kelas,
         tingkat: Number(formData.tingkat),
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString() // ISO string for DB
       };
 
       if (editingId) {

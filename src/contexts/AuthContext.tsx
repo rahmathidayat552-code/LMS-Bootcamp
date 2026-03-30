@@ -33,6 +33,7 @@ interface AuthContextType {
   loginWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,6 +42,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const refreshProfile = async () => {
+    if (!user) return;
+    try {
+      const docRef = doc(db, 'users', user.uid);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setProfile({ uid: user.uid, ...docSnap.data() } as UserProfile);
+      }
+    } catch (error) {
+      console.error("Error refreshing profile:", error);
+    }
+  };
 
   useEffect(() => {
     setPersistence(auth, browserLocalPersistence).catch(console.error);
@@ -124,7 +138,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, loginWithGoogle, loginWithEmail, logout }}>
+    <AuthContext.Provider value={{ user, profile, loading, loginWithGoogle, loginWithEmail, logout, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

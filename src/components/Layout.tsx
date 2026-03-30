@@ -2,17 +2,31 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { BookOpen, Users, Settings, LogOut, Menu, X, Moon, Sun, Monitor, LayoutDashboard, FileCheck } from 'lucide-react';
+import { BookOpen, Users, Settings, LogOut, Menu, X, Moon, Sun, Monitor, LayoutDashboard, FileCheck, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 
 export default function Layout() {
-  const { profile, logout } = useAuth();
+  const { profile, logout, refreshProfile } = useAuth();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefreshProfile = async () => {
+    try {
+      setIsRefreshing(true);
+      await refreshProfile();
+      toast.success('Profil berhasil diperbarui!');
+    } catch (error) {
+      console.error('Error refreshing profile:', error);
+      toast.error('Gagal memperbarui profil');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     const handleResize = () => {
@@ -145,7 +159,15 @@ export default function Layout() {
               </div>
             )}
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
+            <button 
+              onClick={handleRefreshProfile} 
+              disabled={isRefreshing}
+              className={`p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${isRefreshing ? 'animate-spin text-blue-600' : 'text-gray-600 dark:text-gray-400'}`}
+              title="Refresh Profil"
+            >
+              <RefreshCw className="w-5 h-5" />
+            </button>
             <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
               {theme === 'system' ? <Monitor className="w-5 h-5" /> : theme === 'dark' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
             </button>

@@ -105,7 +105,7 @@ export default function Penilaian() {
       const docRef = doc(db, 'progres_siswa', submission.id);
       await updateDoc(docRef, {
         nilai: Number(editScore),
-        dinilai_pada: new Date().toISOString()
+        dinilai_pada: new Date().toISOString() // ISO string for DB
       });
 
       setSubmissions(prev => prev.map(s => 
