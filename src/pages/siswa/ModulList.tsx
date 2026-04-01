@@ -46,18 +46,32 @@ export default function ModulSiswaList() {
         const q = query(modulsRef);
 
         const snapshot = await getDocs(q);
+        console.log("Snapshot empty?", snapshot.empty);
+        console.log("Snapshot size:", snapshot.size);
+
         let fetchedModuls = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         })) as Modul[];
-        
+
+        console.log("Total Moduls Fetched from Firestore:", fetchedModuls.length);
+        console.log("Raw Fetched Moduls:", fetchedModuls);
+        console.log("Student Profile:", profile);
+
         // Filter published modules
         fetchedModuls = fetchedModuls.filter(m => {
           // Handle both boolean and string "true" for is_published
           const isPublished = m.is_published === true || String(m.is_published) === 'true';
+          if (!isPublished) {
+            console.log("Modul rejected (not published):", m.judul_modul, "is_published value:", m.is_published);
+          }
           return isPublished;
         });
+
+        console.log("Moduls after Publication Filter:", fetchedModuls.length);
         
+        console.log("Fetched Published Moduls:", fetchedModuls);
+
         // Sort in memory
         fetchedModuls.sort((a, b) => {
           const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
@@ -70,20 +84,38 @@ export default function ModulSiswaList() {
           const studentKelasId = (profile.kelas_id || '').trim();
           const studentUid = profile.uid;
 
+          console.log("Evaluating Modul:", modul.judul_modul, "Tipe Target:", modul.tipe_target);
+          console.log("Student Kelas ID:", studentKelasId, "Student UID:", studentUid);
+
+          const targetKelasIds = Array.isArray(modul.target_kelas_ids) 
+            ? modul.target_kelas_ids.map(id => String(id).trim()) 
+            : [];
+          const targetSiswaIds = Array.isArray(modul.target_siswa_ids) 
+            ? modul.target_siswa_ids.map(id => String(id).trim()) 
+            : [];
+
+          console.log("Target Kelas IDs:", targetKelasIds);
+          console.log("Target Siswa IDs:", targetSiswaIds);
+
+          let isMatch = false;
+
           if (modul.tipe_target === 'KELAS') {
-            const targetKelasIds = Array.isArray(modul.target_kelas_ids) 
-              ? modul.target_kelas_ids.map(id => String(id).trim()) 
-              : [];
-            return targetKelasIds.includes(studentKelasId);
+            isMatch = targetKelasIds.includes(studentKelasId);
+            console.log("Match KELAS result:", isMatch);
           } else if (modul.tipe_target === 'SISWA') {
-            const targetSiswaIds = Array.isArray(modul.target_siswa_ids) 
-              ? modul.target_siswa_ids.map(id => String(id).trim()) 
-              : [];
-            return targetSiswaIds.includes(studentUid);
+            isMatch = targetSiswaIds.includes(studentUid);
+            console.log("Match SISWA result:", isMatch);
+          } else {
+            // Fallback for missing or unknown tipe_target: check both
+            console.log("Unknown or missing tipe_target, checking both arrays...");
+            isMatch = targetKelasIds.includes(studentKelasId) || targetSiswaIds.includes(studentUid);
+            console.log("Fallback match result:", isMatch);
           }
-          // Default to false if tipe_target is unknown or missing
-          return false;
+
+          return isMatch;
         });
+
+        console.log("Filtered Moduls for Student:", filteredModuls);
 
         setModuls(filteredModuls);
 
