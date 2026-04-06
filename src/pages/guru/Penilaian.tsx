@@ -19,6 +19,8 @@ interface Submission {
   siswa_nama?: string;
   modul_judul?: string;
   item_judul?: string;
+  feedback?: string;
+  jawaban_pertanyaan?: string;
 }
 
 export default function Penilaian() {
@@ -225,6 +227,24 @@ export default function Penilaian() {
                       )}
                       {!s.link_tugas && !s.file_submission && (
                         <span className="text-xs text-gray-400 italic">Tidak ada lampiran</span>
+                      )}
+                      
+                      {/* Display Feedback & Jawaban Pertanyaan */}
+                      {(s.feedback || s.jawaban_pertanyaan) && (
+                        <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                          {s.jawaban_pertanyaan && (
+                            <div className="mb-1">
+                              <span className="text-[10px] uppercase font-semibold text-gray-500 dark:text-gray-400 block">Jawaban Pertanyaan:</span>
+                              <span className="text-xs text-gray-700 dark:text-gray-300">{s.jawaban_pertanyaan}</span>
+                            </div>
+                          )}
+                          {s.feedback && (
+                            <div>
+                              <span className="text-[10px] uppercase font-semibold text-gray-500 dark:text-gray-400 block">Feedback:</span>
+                              <span className="text-xs text-gray-700 dark:text-gray-300">{s.feedback}</span>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   </td>

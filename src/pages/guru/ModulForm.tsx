@@ -28,6 +28,8 @@ interface ModulItem {
   deskripsi: string;
   konten: string; // For KUIS, this will be JSON stringified array of questions
   urutan: number;
+  wajib_feedback?: boolean;
+  pertanyaan_feedback?: string;
 }
 
 interface KuisSoal {
@@ -289,7 +291,9 @@ export default function ModulForm() {
       judul_item: '',
       deskripsi: '',
       konten: defaultKonten,
-      urutan: items.length + 1
+      urutan: items.length + 1,
+      wajib_feedback: true,
+      pertanyaan_feedback: ''
     };
     setItems([...items, newItem]);
     setCurrentStepIndex(items.length); // Move to the newly added item
@@ -408,7 +412,7 @@ export default function ModulForm() {
       const modulRef = isEditing && id ? doc(db, 'moduls', id) : doc(collection(db, 'moduls'));
       const modulId = modulRef.id;
 
-      const modulData = {
+      const modulData: any = {
         guru_id: user?.uid,
         mata_pelajaran: mataPelajaran,
         judul_modul: judulModul,
@@ -421,6 +425,10 @@ export default function ModulForm() {
         is_published: publish,
         created_at: new Date().toISOString() // ISO string for DB
       };
+
+      if (publish) {
+        modulData.is_archived = false;
+      }
 
       if (isEditing) {
         batch.update(modulRef, modulData);
@@ -446,6 +454,8 @@ export default function ModulForm() {
           deskripsi: item.deskripsi,
           konten: item.konten,
           urutan: index + 1,
+          wajib_feedback: item.wajib_feedback !== false,
+          pertanyaan_feedback: item.pertanyaan_feedback || '',
           created_at: new Date().toISOString() // ISO string for DB
         });
       });
@@ -740,6 +750,37 @@ export default function ModulForm() {
                     className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none"
                     placeholder="Berikan instruksi apa yang harus dilakukan siswa pada tahap ini..."
                   />
+                </div>
+
+                {/* Feedback & Pertanyaan Settings */}
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800/50 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-900 dark:text-white">Wajibkan Feedback</h4>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Siswa harus mengisi feedback setelah menyelesaikan tahap ini</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        className="sr-only peer"
+                        checked={item.wajib_feedback !== false} // Default true
+                        onChange={(e) => handleItemChange(index, 'wajib_feedback', e.target.checked)}
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+
+                  <div className="pt-2 border-t border-blue-100 dark:border-blue-800/50">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Pertanyaan Khusus (Opsional)</label>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Tambahkan pertanyaan yang wajib dijawab siswa pada tahap ini.</p>
+                    <input
+                      type="text"
+                      value={item.pertanyaan_feedback || ''}
+                      onChange={(e) => handleItemChange(index, 'pertanyaan_feedback', e.target.value)}
+                      className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="Contoh: Apa kesimpulan Anda dari materi ini?"
+                    />
+                  </div>
                 </div>
   
                 {/* Dynamic Content Field based on Type */}

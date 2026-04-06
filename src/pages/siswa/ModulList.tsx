@@ -16,6 +16,7 @@ interface Modul {
   target_siswa_ids: string[];
   tipe_target: 'KELAS' | 'SISWA';
   is_published: boolean;
+  is_archived?: boolean;
   ikon?: string;
   prasyarat_id?: string;
   created_at: any;
@@ -64,14 +65,15 @@ export default function ModulSiswaList() {
         console.log("Raw Fetched Moduls:", fetchedModuls);
         console.log("Student Profile:", profile);
 
-        // Filter published modules
+        // Filter published or archived modules
         fetchedModuls = fetchedModuls.filter(m => {
-          // Handle both boolean and string "true" for is_published
+          // Handle both boolean and string "true" for is_published and is_archived
           const isPublished = m.is_published === true || String(m.is_published) === 'true';
-          if (!isPublished) {
-            console.log("Modul rejected (not published):", m.judul_modul, "is_published value:", m.is_published);
+          const isArchived = m.is_archived === true || String(m.is_archived) === 'true';
+          if (!isPublished && !isArchived) {
+            console.log("Modul rejected (not published/archived):", m.judul_modul, "is_published value:", m.is_published);
           }
-          return isPublished;
+          return isPublished || isArchived;
         });
 
         console.log("Moduls after Publication Filter:", fetchedModuls.length);
@@ -251,9 +253,16 @@ export default function ModulSiswaList() {
                     <div className={`p-3 rounded-lg ${isLocked ? 'bg-gray-100 dark:bg-gray-700 text-gray-400' : 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'}`}>
                       {isLocked ? <Lock className="w-6 h-6" /> : <BookOpen className="w-6 h-6" />}
                     </div>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300">
-                      {modul.mata_pelajaran}
-                    </span>
+                    <div className="flex flex-col items-end space-y-1">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300">
+                        {modul.mata_pelajaran}
+                      </span>
+                      {modul.is_archived && (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300">
+                          Diarsipkan
+                        </span>
+                      )}
+                    </div>
                   </div>
                   
                   <h3 className={`text-lg font-semibold mb-2 transition-colors ${
@@ -314,6 +323,10 @@ export default function ModulSiswaList() {
                     {isLocked ? (
                       <div className="flex items-center text-gray-400 text-sm font-medium">
                         Terkunci
+                      </div>
+                    ) : modul.is_archived ? (
+                      <div className="flex items-center text-gray-500 text-sm font-medium">
+                        Diarsipkan
                       </div>
                     ) : (
                       <Link 

@@ -16,6 +16,8 @@ interface ModulItem {
   deskripsi: string;
   konten: string;
   urutan: number;
+  wajib_feedback?: boolean;
+  pertanyaan_feedback?: string;
 }
 
 interface KuisSoal {
@@ -50,6 +52,10 @@ export default function ModulSiswaDetail() {
   // State for Tugas
   const [tugasLink, setTugasLink] = useState('');
   const [tugasFile, setTugasFile] = useState<File | null>(null);
+
+  // State for Feedback
+  const [feedbackText, setFeedbackText] = useState('');
+  const [pertanyaanAnswer, setPertanyaanAnswer] = useState('');
 
   useEffect(() => {
     const fetchModulData = async () => {
@@ -192,17 +198,49 @@ export default function ModulSiswaDetail() {
     }
   }, [currentIndex, items, progress, profile, id, modul]);
 
+  useEffect(() => {
+    if (items.length > 0 && items[currentIndex]) {
+      const currentItemId = items[currentIndex].id;
+      const currentProgress = progress[currentItemId];
+      
+      if (currentProgress) {
+        setFeedbackText(currentProgress.feedback || '');
+        setPertanyaanAnswer(currentProgress.jawaban_pertanyaan || '');
+      } else {
+        setFeedbackText('');
+        setPertanyaanAnswer('');
+      }
+    }
+  }, [currentIndex, items, progress]);
+
+  const isFeedbackValid = () => {
+    if (!items[currentIndex]) return true;
+    const currentItem = items[currentIndex];
+    
+    if (currentItem.wajib_feedback !== false && !feedbackText.trim()) {
+      return false;
+    }
+    if (currentItem.pertanyaan_feedback && !pertanyaanAnswer.trim()) {
+      return false;
+    }
+    return true;
+  };
+
   const markAsCompleted = async () => {
-    if (!profile || !id || !items[currentIndex]) return;
+    if (!profile || !id || !items[currentIndex] || modul?.is_archived) return;
     
     try {
-      const progressData = {
+      const progressData: any = {
         siswa_id: profile.uid,
         modul_item_id: items[currentIndex].id,
         modul_id: id,
         status_selesai: true,
         selesai_pada: serverTimestamp()
       };
+
+      if (feedbackText) progressData.feedback = feedbackText;
+      if (pertanyaanAnswer) progressData.jawaban_pertanyaan = pertanyaanAnswer;
+
       await setDoc(doc(db, 'progres_siswa', `${profile.uid}_${items[currentIndex].id}`), progressData, { merge: true });
       
       setProgress(prev => ({
@@ -226,42 +264,86 @@ export default function ModulSiswaDetail() {
     }
   };
 
-  const handleNext = async () => {
-    // Mark current item as completed if it's not a KUIS or TUGAS (which have their own submit buttons)
-    if (items[currentIndex].tipe_item !== 'KUIS' && items[currentIndex].tipe_item !== 'TUGAS') {
-      await markAsCompleted();
+  const saveFeedbackOnly = async () => {
+    if (!profile || !id || !items[currentIndex] || modul?.is_archived) return;
+    try {
+      const progressData: any = {};
+      if (feedbackText) progressData.feedback = feedbackText;
+      if (pertanyaanAnswer) progressData.jawaban_pertanyaan = pertanyaanAnswer;
+      
+      if (Object.keys(progressData).length > 0) {
+        await setDoc(doc(db, 'progres_siswa', `${profile.uid}_${items[currentIndex].id}`), progressData, { merge: true });
+        setProgress(prev => ({
+          ...prev,
+          [items[currentIndex].id]: {
+            ...prev[items[currentIndex].id],
+            ...progressData
+          }
+        }));
+      }
+    } catch (error) {
+      console.error('Error saving feedback:', error);
     }
+  };
+
+  const handleNext = async () => {
+    if (!modul?.is_archived) {
+      if (!isFeedbackValid()) {
+        toast.error('Silakan isi feedback dan pertanyaan yang wajib sebelum melanjutkan.');
+        return;
+      }
+
+      // Mark current item as completed if it's not a KUIS or TUGAS (which have their own submit buttons)
+      if (items[currentIndex].tipe_item !== 'KUIS' && items[currentIndex].tipe_item !== 'TUGAS') {
+        await markAsCompleted();
+      } else {
+        await saveFeedbackOnly();
+      }
+    }
+
+    // Reset feedback state for next item
+    setFeedbackText('');
+    setPertanyaanAnswer('');
 
     if (currentIndex < items.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
-      toast.success('Selamat! Anda telah menyelesaikan modul ini.');
+      if (!modul?.is_archived) {
+        toast.success('Selamat! Anda telah menyelesaikan modul ini.');
+      }
       navigate('/siswa/modul');
     }
   };
 
   const handlePrev = () => {
     if (currentIndex > 0) {
+      // Reset feedback state when going back
+      setFeedbackText('');
+      setPertanyaanAnswer('');
       setCurrentIndex(currentIndex - 1);
     }
   };
 
   const submitKuis = async (questions: KuisSoal[]) => {
+    if (modul?.is_archived) return;
+    if (!isFeedbackValid()) {
+      toast.error('Silakan isi feedback dan pertanyaan yang wajib sebelum mengumpulkan kuis.');
+      return;
+    }
+
     let score = 0;
-    let totalBobot = 0;
 
     questions.forEach((q, index) => {
-      totalBobot += q.bobot_nilai;
       if (kuisAnswers[index] === q.kunci_jawaban) {
-        score += q.bobot_nilai;
+        score += q.bobot_nilai || 0;
       }
     });
 
-    const finalScore = totalBobot > 0 ? Math.round((score / totalBobot) * 100) : 0;
+    const finalScore = score;
     setKuisScore(finalScore);
     setKuisSubmitted(true);
 
-    // Save progress to Firestore (Optional, implement if needed)
+    // Save progress to Firestore
     try {
       const progressData = {
         siswa_id: profile?.uid,
@@ -270,9 +352,11 @@ export default function ModulSiswaDetail() {
         status_selesai: true,
         nilai: finalScore,
         jawaban: kuisAnswers,
-        selesai_pada: serverTimestamp()
+        selesai_pada: serverTimestamp(),
+        feedback: feedbackText || null,
+        jawaban_pertanyaan: pertanyaanAnswer || null
       };
-      await setDoc(doc(db, 'progres_siswa', `${profile?.uid}_${items[currentIndex].id}`), progressData);
+      await setDoc(doc(db, 'progres_siswa', `${profile?.uid}_${items[currentIndex].id}`), progressData, { merge: true });
       
       // Update local progress state
       setProgress(prev => ({
@@ -297,6 +381,12 @@ export default function ModulSiswaDetail() {
   };
 
   const submitTugas = async () => {
+    if (modul?.is_archived) return;
+    if (!isFeedbackValid()) {
+      toast.error('Silakan isi feedback dan pertanyaan yang wajib sebelum mengumpulkan tugas.');
+      return;
+    }
+
     let config = { allow_link: true, allow_file: false, allowed_extensions: [] as string[] };
     try {
       if (items[currentIndex].konten) {
@@ -308,18 +398,23 @@ export default function ModulSiswaDetail() {
     }
 
     const hasExistingFile = !!progress[items[currentIndex].id]?.file_submission;
+    const hasExistingLink = !!progress[items[currentIndex].id]?.link_tugas;
 
     if (config.allow_link && config.allow_file) {
-      if (!tugasLink.trim() && !tugasFile && !hasExistingFile) {
-        toast.error('Masukkan link tugas atau upload file');
+      if (!tugasLink.trim() && !tugasFile && !hasExistingFile && !hasExistingLink) {
+        toast.error('Masukkan link tugas atau upload file yang diminta.');
         return;
       }
-    } else if (config.allow_link && !tugasLink.trim()) {
-      toast.error('Masukkan link tugas terlebih dahulu');
-      return;
-    } else if (config.allow_file && !tugasFile && !hasExistingFile) {
-      toast.error('Upload file tugas terlebih dahulu');
-      return;
+    } else if (config.allow_link && !config.allow_file) {
+      if (!tugasLink.trim() && !hasExistingLink) {
+        toast.error('Masukkan link tugas terlebih dahulu.');
+        return;
+      }
+    } else if (config.allow_file && !config.allow_link) {
+      if (!tugasFile && !hasExistingFile) {
+        toast.error('Upload file tugas terlebih dahulu.');
+        return;
+      }
     }
 
     // Validate file extension
@@ -349,7 +444,9 @@ export default function ModulSiswaDetail() {
         modul_item_id: items[currentIndex].id,
         modul_id: id,
         status_selesai: true,
-        selesai_pada: serverTimestamp()
+        selesai_pada: serverTimestamp(),
+        feedback: feedbackText || null,
+        jawaban_pertanyaan: pertanyaanAnswer || null
       };
 
       if (tugasLink.trim()) {
@@ -579,7 +676,8 @@ export default function ModulSiswaDetail() {
                               value={opt}
                               checked={kuisAnswers[qIndex] === opt}
                               onChange={() => setKuisAnswers({ ...kuisAnswers, [qIndex]: opt })}
-                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                              disabled={modul?.is_archived}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 disabled:opacity-50"
                             />
                             <span className="ml-3 block text-sm font-medium text-gray-900 dark:text-gray-300">
                               <span className="font-bold mr-2">{opt}.</span> {q[optionKey]}
@@ -593,7 +691,7 @@ export default function ModulSiswaDetail() {
                 <div className="flex justify-end pt-4">
                   <button
                     onClick={() => submitKuis(questions)}
-                    disabled={Object.keys(kuisAnswers).length < questions.length}
+                    disabled={Object.keys(kuisAnswers).length < questions.length || modul?.is_archived}
                     className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Kumpulkan Jawaban
@@ -639,8 +737,9 @@ export default function ModulSiswaDetail() {
                     id="tugasLink"
                     value={tugasLink}
                     onChange={(e) => setTugasLink(e.target.value)}
+                    disabled={modul?.is_archived}
                     placeholder="https://..."
-                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-shadow"
+                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
               )}
@@ -660,8 +759,9 @@ export default function ModulSiswaDetail() {
                     type="file"
                     id="tugasFile"
                     accept={acceptString}
+                    disabled={modul?.is_archived}
                     onChange={(e) => setTugasFile(e.target.files?.[0] || null)}
-                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-shadow file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-400"
+                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-shadow file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-400 disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                   {config.allowed_extensions && config.allowed_extensions.length > 0 && (
                     <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
@@ -673,7 +773,8 @@ export default function ModulSiswaDetail() {
 
               <button
                 onClick={submitTugas}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                disabled={modul?.is_archived}
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Kumpulkan Tugas
               </button>
@@ -683,6 +784,53 @@ export default function ModulSiswaDetail() {
       default:
         return <div>Tipe konten tidak didukung.</div>;
     }
+  };
+
+  const renderFeedbackForm = () => {
+    if (!items[currentIndex]) return null;
+    const currentItem = items[currentIndex];
+    
+    // If feedback is not required and no question is set, don't show anything
+    if (currentItem.wajib_feedback === false && !currentItem.pertanyaan_feedback) return null;
+
+    return (
+      <div className="mt-8 border-t border-gray-200 dark:border-gray-700 pt-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Feedback & Refleksi</h3>
+        
+        {currentItem.pertanyaan_feedback && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Pertanyaan: <span className="font-normal italic">{currentItem.pertanyaan_feedback}</span>
+              <span className="text-red-500 ml-1">*</span>
+            </label>
+            <textarea
+              value={pertanyaanAnswer}
+              onChange={(e) => setPertanyaanAnswer(e.target.value)}
+              disabled={modul?.is_archived}
+              rows={3}
+              className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+              placeholder="Tuliskan jawaban Anda di sini..."
+            />
+          </div>
+        )}
+
+        {currentItem.wajib_feedback !== false && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Feedback Pembelajaran <span className="text-red-500 ml-1">*</span>
+            </label>
+            <textarea
+              value={feedbackText}
+              onChange={(e) => setFeedbackText(e.target.value)}
+              disabled={modul?.is_archived}
+              rows={3}
+              className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+              placeholder="Apa yang Anda pelajari dari materi ini? Apakah ada yang kurang jelas?"
+            />
+          </div>
+        )}
+      </div>
+    );
   };
 
   const getIconForType = (type: string) => {
@@ -697,9 +845,21 @@ export default function ModulSiswaDetail() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto pb-20 flex flex-col md:flex-row gap-6">
-      {/* Sidebar */}
-      <div className="w-full md:w-64 shrink-0 space-y-4">
+    <div className="max-w-6xl mx-auto pb-20">
+      {modul?.is_archived && (
+        <div className="mb-6 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4 flex items-start space-x-3">
+          <BookOpen className="w-6 h-6 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-bold text-orange-800 dark:text-orange-300">Modul Diarsipkan</h3>
+            <p className="text-sm text-orange-700 dark:text-orange-400 mt-1">
+              Modul ini telah diarsipkan oleh guru. Anda dapat melihat materi dan riwayat pekerjaan Anda, tetapi tidak dapat mengerjakan atau mengumpulkan tugas/kuis baru.
+            </p>
+          </div>
+        </div>
+      )}
+      <div className="flex flex-col md:flex-row gap-6">
+        {/* Sidebar */}
+        <div className="w-full md:w-64 shrink-0 space-y-4">
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 border border-gray-100 dark:border-gray-700">
           <button 
             onClick={() => navigate('/siswa/modul')}
@@ -817,6 +977,7 @@ export default function ModulSiswaDetail() {
           
           <div className="p-6 md:p-8">
             {renderContent()}
+            {renderFeedbackForm()}
           </div>
         </div>
 
@@ -850,8 +1011,9 @@ export default function ModulSiswaDetail() {
             <button
               onClick={handleNext}
               disabled={
-                (currentItem.tipe_item === 'KUIS' || currentItem.tipe_item === 'TUGAS') && 
-                !progress[currentItem.id]?.status_selesai
+                !isFeedbackValid() ||
+                ((currentItem.tipe_item === 'KUIS' || currentItem.tipe_item === 'TUGAS') && 
+                !progress[currentItem.id]?.status_selesai)
               }
               className={`flex items-center px-6 py-2 text-sm font-semibold text-white border border-transparent rounded-xl transition-all shadow-lg hover:scale-105 active:scale-95 ${
                 currentIndex === items.length - 1
@@ -867,6 +1029,7 @@ export default function ModulSiswaDetail() {
             </button>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

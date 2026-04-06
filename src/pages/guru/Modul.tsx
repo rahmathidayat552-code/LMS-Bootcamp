@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, deleteDoc, doc, orderBy, writeBatch, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, deleteDoc, doc, orderBy, writeBatch, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
@@ -14,6 +14,7 @@ interface Modul {
   mata_pelajaran: string;
   tipe_target: string;
   is_published: boolean;
+  is_archived?: boolean;
   ikon?: string;
   created_at: string;
   viewers?: string[];
@@ -30,6 +31,7 @@ export default function ModulList() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedModulForDelete, setSelectedModulForDelete] = useState<Modul | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteProgress, setDeleteProgress] = useState(false);
   const [hasSubsequent, setHasSubsequent] = useState(false);
   const [copySubsequent, setCopySubsequent] = useState(false);
 
@@ -64,6 +66,7 @@ export default function ModulList() {
 
   const handleDeleteClick = (modul: Modul) => {
     setSelectedModulForDelete(modul);
+    setDeleteProgress(false); // Default to not deleting progress, or true if preferred
     setShowDeleteModal(true);
   };
 
@@ -72,7 +75,29 @@ export default function ModulList() {
     
     setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, 'moduls', selectedModulForDelete.id));
+      const batch = writeBatch(db);
+
+      // 1. Delete all items in this module
+      const itemsQuery = query(collection(db, 'modul_items'), where('modul_id', '==', selectedModulForDelete.id));
+      const itemsSnapshot = await getDocs(itemsQuery);
+      itemsSnapshot.docs.forEach(itemDoc => {
+        batch.delete(doc(db, 'modul_items', itemDoc.id));
+      });
+
+      // 2. Delete student progress if selected
+      if (deleteProgress) {
+        const progressQuery = query(collection(db, 'progres_siswa'), where('modul_id', '==', selectedModulForDelete.id));
+        const progressSnapshot = await getDocs(progressQuery);
+        progressSnapshot.docs.forEach(progDoc => {
+          batch.delete(doc(db, 'progres_siswa', progDoc.id));
+        });
+      }
+
+      // 3. Delete the module itself
+      batch.delete(doc(db, 'moduls', selectedModulForDelete.id));
+
+      await batch.commit();
+
       toast.success('Modul berhasil dihapus');
       setShowDeleteModal(false);
       setSelectedModulForDelete(null);
@@ -82,6 +107,21 @@ export default function ModulList() {
       toast.error('Gagal menghapus modul');
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const toggleArchive = async (modul: Modul) => {
+    try {
+      const newStatus = !modul.is_archived;
+      await updateDoc(doc(db, 'moduls', modul.id), {
+        is_archived: newStatus,
+        is_published: newStatus ? false : modul.is_published // Unpublish if archiving
+      });
+      toast.success(newStatus ? 'Modul berhasil diarsipkan' : 'Modul berhasil dikembalikan dari arsip');
+      fetchModuls();
+    } catch (error) {
+      console.error('Error archiving modul:', error);
+      toast.error('Gagal mengarsipkan modul');
     }
   };
 
@@ -214,11 +254,18 @@ export default function ModulList() {
               <div className="p-6 flex-1">
                 <div className="flex justify-between items-start mb-4">
                   <span className={`px-2.5 py-1 text-xs font-medium rounded-full flex items-center space-x-1 ${
-                    modul.is_published 
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                      : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                    modul.is_archived
+                      ? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                      : modul.is_published 
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
                   }`}>
-                    {modul.is_published ? (
+                    {modul.is_archived ? (
+                      <>
+                        <BookOpen className="w-3 h-3" />
+                        <span>Diarsipkan</span>
+                      </>
+                    ) : modul.is_published ? (
                       <>
                         <CheckCircle className="w-3 h-3" />
                         <span>Dipublikasikan</span>
@@ -252,6 +299,17 @@ export default function ModulList() {
                 </div>
               </div>
               <div className="bg-gray-50 dark:bg-gray-800/50 px-6 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
+                <button
+                  onClick={() => toggleArchive(modul)}
+                  className={`p-2 rounded-lg transition-colors ${
+                    modul.is_archived 
+                      ? 'text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20' 
+                      : 'text-gray-600 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700'
+                  }`}
+                  title={modul.is_archived ? "Buka Arsip" : "Arsipkan Modul"}
+                >
+                  <BookOpen className="w-5 h-5" />
+                </button>
                 <button
                   onClick={() => openCopyModal(modul)}
                   className="p-2 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
@@ -305,9 +363,25 @@ export default function ModulList() {
                   <h3 className="text-xl font-bold text-gray-900 dark:text-white">Hapus Modul?</h3>
                 </div>
                 
-                <p className="text-gray-600 dark:text-gray-400 mb-6">
+                <p className="text-gray-600 dark:text-gray-400 mb-4">
                   Apakah Anda yakin ingin menghapus modul <span className="font-semibold text-gray-900 dark:text-white">"{selectedModulForDelete?.judul_modul}"</span>? Tindakan ini tidak dapat dibatalkan dan semua data terkait modul ini akan hilang.
                 </p>
+
+                <div className="mb-6">
+                  <label className="flex items-start space-x-3 cursor-pointer p-3 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-lg">
+                    <input
+                      type="checkbox"
+                      checked={deleteProgress}
+                      onChange={(e) => setDeleteProgress(e.target.checked)}
+                      className="mt-1 rounded text-red-600 focus:ring-red-500 border-gray-300 dark:border-gray-600"
+                    />
+                    <span className="text-sm text-red-800 dark:text-red-300">
+                      <strong>Hapus juga nilai dan progres siswa</strong>
+                      <br />
+                      Centang ini jika Anda ingin menghapus semua data pengerjaan siswa yang sudah dinilai maupun belum pada modul ini.
+                    </span>
+                  </label>
+                </div>
 
                 <div className="flex space-x-3">
                   <button
