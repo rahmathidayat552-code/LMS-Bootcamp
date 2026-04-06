@@ -28,12 +28,15 @@ export default function ModulSiswaList() {
   const [kelasName, setKelasName] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
+  // Refresh profile sekali saat komponen dimuat untuk mendapatkan kelas_id terbaru
+  useEffect(() => {
+    refreshProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     const fetchModulsAndProgress = async () => {
       if (!profile) return;
-
-      // Refresh profile untuk mendapatkan kelas_id terbaru
-      await refreshProfile();
 
       try {
         // Fetch Kelas Name if exists
