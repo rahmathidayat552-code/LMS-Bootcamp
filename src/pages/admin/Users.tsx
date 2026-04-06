@@ -256,6 +256,11 @@ export default function Users() {
         errorCount++;
       }
       setImportProgress(i + 1);
+      
+      // Memberikan jeda singkat agar browser dapat me-render animasi progress bar dengan mulus
+      if (i % 2 === 0) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
     }
 
     if (successCount > 0) {
