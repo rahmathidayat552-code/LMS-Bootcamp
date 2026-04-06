@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { collection, getDocs, query, where, doc, deleteDoc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
-import { Search, Trash2, User, Phone, Mail, BookOpen, Edit2, Check, X } from 'lucide-react';
+import { Search, Trash2, User, Phone, Mail, BookOpen, Edit2, Check, X, FileText, ArrowUpDown } from 'lucide-react';
 import { toast } from 'sonner';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface UserProfile {
   uid: string;
@@ -44,6 +46,10 @@ export default function ManajemenSiswa() {
     kelas_id: '',
     username: ''
   });
+
+  const [filterKelasId, setFilterKelasId] = useState('');
+  const [sortBy, setSortBy] = useState<'nama_lengkap' | 'username'>('nama_lengkap');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const fetchData = async () => {
     try {
@@ -104,7 +110,7 @@ export default function ManajemenSiswa() {
         }
       }
 
-      toast.success('Data siswa berhasil diperbarui');
+      toast.success('Berhasil update data pengguna!');
       setIsEditModalOpen(false);
       fetchData();
     } catch (error) {
@@ -116,7 +122,7 @@ export default function ManajemenSiswa() {
   };
 
   const handleDelete = async (uid: string) => {
-    if (window.confirm('Apakah Anda yakin ingin menghapus akun siswa ini? Tindakan ini tidak dapat dibatalkan.')) {
+    if (window.confirm('Apakah Anda yakin untuk menghapus data ini?')) {
       try {
         await deleteDoc(doc(db, 'users', uid));
         setStudents(students.filter(s => s.uid !== uid));
@@ -134,15 +140,78 @@ export default function ManajemenSiswa() {
     return kelas ? kelas.nama_kelas : '-';
   };
 
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    const tableColumn = ["No", "Nama Lengkap", "NISN", "Kelas", "Email", "No. WA"];
+    const tableRows: any[] = [];
+
+    filteredStudents.forEach((student, index) => {
+      const studentData = [
+        index + 1,
+        student.nama_lengkap,
+        student.username || '-',
+        getKelasName(student.kelas_id),
+        student.email,
+        student.no_wa || '-'
+      ];
+      tableRows.push(studentData);
+    });
+
+    doc.setFontSize(18);
+    doc.text("Data Manajemen Siswa", 14, 22);
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    
+    const filterText = filterKelasId ? `Filter Kelas: ${getKelasName(filterKelasId)}` : "Filter Kelas: Semua";
+    doc.text(filterText, 14, 30);
+    doc.text(`Total Siswa: ${filteredStudents.length}`, 14, 35);
+    doc.text(`Tanggal Cetak: ${new Date().toLocaleString('id-ID')}`, 14, 40);
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 45,
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [37, 99, 235] }
+    });
+
+    doc.save(`Data_Siswa_${new Date().getTime()}.pdf`);
+    toast.success('Berhasil mengekspor data ke PDF!');
+  };
+
   const getStudentCountByKelas = (kelasId: string) => {
     return students.filter(s => s.kelas_id === kelasId).length;
   };
 
-  const filteredStudents = students.filter(s => 
-    s.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (s.username && s.username.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredStudents = students
+    .filter(student => {
+      const matchesSearch = 
+        student.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (student.username && student.username.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+      const matchesKelas = filterKelasId ? student.kelas_id === filterKelasId : true;
+      
+      return matchesSearch && matchesKelas;
+    })
+    .sort((a, b) => {
+      let valA = '';
+      let valB = '';
+      
+      if (sortBy === 'nama_lengkap') {
+        valA = a.nama_lengkap.toLowerCase();
+        valB = b.nama_lengkap.toLowerCase();
+      } else if (sortBy === 'username') {
+        valA = (a.username || '').toLowerCase();
+        valB = (b.username || '').toLowerCase();
+      }
+      
+      if (sortOrder === 'asc') {
+        return valA.localeCompare(valB);
+      } else {
+        return valB.localeCompare(valA);
+      }
+    });
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -220,7 +289,7 @@ export default function ManajemenSiswa() {
         });
       }
 
-      toast.success('Data siswa berhasil diperbarui');
+      toast.success('Berhasil update data pengguna!');
       setInlineEditingId(null);
       fetchData();
     } catch (error) {
@@ -256,7 +325,7 @@ export default function ManajemenSiswa() {
 
       await Promise.all(updatePromises);
 
-      toast.success(`${selectedStudents.length} data siswa berhasil diperbarui`);
+      toast.success(`Berhasil update data pengguna! (${selectedStudents.length} data)`);
       setIsBulkEditModalOpen(false);
       setSelectedStudents([]);
       setBulkEditKelasId('');
@@ -290,40 +359,115 @@ export default function ManajemenSiswa() {
       {/* Ringkasan Kelas */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
         <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Daftar Kelas & Jumlah Siswa</h2>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Ringkasan Jumlah Siswa per Kelas</h2>
         </div>
-        <div className="p-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {kelasList.sort((a, b) => a.nama_kelas.localeCompare(b.nama_kelas)).map(kelas => (
-              <div key={kelas.id} className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg p-3 text-center">
-                <div className="text-sm font-medium text-blue-900 dark:text-blue-100">{kelas.nama_kelas}</div>
-                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{getStudentCountByKelas(kelas.id)}</div>
-                <div className="text-xs text-blue-500 dark:text-blue-300">Siswa</div>
-              </div>
-            ))}
-            <div className="bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg p-3 text-center">
-              <div className="text-sm font-medium text-gray-700 dark:text-gray-300">Belum Ada Kelas</div>
-              <div className="text-2xl font-bold text-gray-600 dark:text-gray-400 mt-1">
-                {students.filter(s => !s.kelas_id).length}
-              </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">Siswa</div>
-            </div>
-          </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
+                <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Nama Kelas</th>
+                <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider text-center">Jumlah Siswa</th>
+                <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              {kelasList.sort((a, b) => a.nama_kelas.localeCompare(b.nama_kelas)).map(kelas => (
+                <tr key={kelas.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                  <td className="px-6 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                    {kelas.nama_kelas}
+                  </td>
+                  <td className="px-6 py-3 text-sm text-center font-bold text-blue-600 dark:text-blue-400">
+                    {getStudentCountByKelas(kelas.id)}
+                  </td>
+                  <td className="px-6 py-3 text-right">
+                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+                      Aktif
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              <tr className="bg-gray-50 dark:bg-gray-700/50 font-medium">
+                <td className="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">
+                  Belum Ada Kelas
+                </td>
+                <td className="px-6 py-3 text-sm text-center font-bold text-gray-600 dark:text-gray-400">
+                  {students.filter(s => !s.kelas_id).length}
+                </td>
+                <td className="px-6 py-3 text-right">
+                  <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-gray-200">
+                    Pending
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Cari nama, email, atau NISN..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-col md:flex-row md:items-center justify-between space-y-4 md:space-y-0">
+          <div className="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4 flex-1">
+            <div className="relative max-w-md flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Cari nama, email, atau NISN..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <select
+              value={filterKelasId}
+              onChange={(e) => setFilterKelasId(e.target.value)}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+            >
+              <option value="">Semua Kelas</option>
+              {kelasList.map(k => (
+                <option key={k.id} value={k.id}>{k.nama_kelas}</option>
+              ))}
+            </select>
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">Urutkan:</span>
+              <button
+                onClick={() => {
+                  if (sortBy === 'nama_lengkap') {
+                    setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                  } else {
+                    setSortBy('nama_lengkap');
+                    setSortOrder('asc');
+                  }
+                }}
+                className={`p-2 rounded-lg border transition-colors flex items-center space-x-1 ${sortBy === 'nama_lengkap' ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-900/20 dark:border-blue-800' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'}`}
+                title="Urutkan berdasarkan Nama"
+              >
+                <span className="text-xs font-medium">Nama</span>
+                <ArrowUpDown className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => {
+                  if (sortBy === 'username') {
+                    setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                  } else {
+                    setSortBy('username');
+                    setSortOrder('asc');
+                  }
+                }}
+                className={`p-2 rounded-lg border transition-colors flex items-center space-x-1 ${sortBy === 'username' ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-900/20 dark:border-blue-800' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'}`}
+                title="Urutkan berdasarkan NISN"
+              >
+                <span className="text-xs font-medium">NISN</span>
+                <ArrowUpDown className="w-3 h-3" />
+              </button>
+            </div>
           </div>
+          <button
+            onClick={exportToPDF}
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors ml-0 md:ml-4"
+          >
+            <FileText className="w-4 h-4" />
+            <span>Export PDF</span>
+          </button>
         </div>
 
         <div className="overflow-x-auto">

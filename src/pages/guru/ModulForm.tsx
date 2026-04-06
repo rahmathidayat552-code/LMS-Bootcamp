@@ -3,11 +3,12 @@ import { collection, query, where, getDocs, doc, writeBatch, getDoc } from 'fire
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, useParams, useOutletContext } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Save, GripVertical, ArrowUp, ArrowDown, Image as ImageIcon, X, Search, Youtube, ExternalLink, ChevronLeft, ChevronRight, BookOpen, Users } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, GripVertical, ArrowUp, ArrowDown, Image as ImageIcon, X, Search, Youtube, ExternalLink, ChevronLeft, ChevronRight, BookOpen, Users, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { GoogleGenAI, Type } from "@google/genai";
+import { motion, AnimatePresence } from 'motion/react';
 
 interface Kelas {
   id: string;
@@ -105,6 +106,7 @@ export default function ModulForm() {
   // YouTube Search State
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [showPublishSuccess, setShowPublishSuccess] = useState(false);
 
   const searchYouTube = async (query: string) => {
     if (!query) return;
@@ -461,8 +463,16 @@ export default function ModulForm() {
       });
 
       await batch.commit();
-      toast.success(publish ? 'Modul berhasil dipublikasikan' : 'Modul berhasil disimpan sebagai draft');
-      navigate('/guru/modul');
+      
+      if (publish) {
+        setShowPublishSuccess(true);
+        setTimeout(() => {
+          navigate('/guru/modul');
+        }, 3000);
+      } else {
+        toast.success('Modul berhasil disimpan sebagai draft');
+        navigate('/guru/modul');
+      }
     } catch (error: any) {
       console.error('Error saving modul:', error);
       toast.error('Gagal menyimpan modul: ' + error.message);
@@ -1245,6 +1255,26 @@ export default function ModulForm() {
           Publikasikan Modul
         </button>
       </div>
+
+      <AnimatePresence>
+        {showPublishSuccess && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className="fixed inset-0 flex items-center justify-center pointer-events-none z-[9999]"
+          >
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-6 flex flex-col items-center space-y-4 min-w-[300px]">
+              <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
+              </div>
+              <p className="text-gray-900 dark:text-white font-medium text-lg text-center">
+                Modul Berhasil Dipublikasi!
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

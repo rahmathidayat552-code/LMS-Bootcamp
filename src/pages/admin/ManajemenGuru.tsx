@@ -44,7 +44,7 @@ export default function ManajemenGuru() {
   }, []);
 
   const handleDelete = async (uid: string) => {
-    if (window.confirm('Apakah Anda yakin ingin menghapus akun guru ini? Tindakan ini tidak dapat dibatalkan.')) {
+    if (window.confirm('Apakah Anda yakin untuk menghapus data ini?')) {
       try {
         await deleteDoc(doc(db, 'users', uid));
         setTeachers(teachers.filter(t => t.uid !== uid));
@@ -119,7 +119,7 @@ export default function ManajemenGuru() {
         });
       }
 
-      toast.success('Data guru berhasil diperbarui');
+      toast.success('Berhasil update data pengguna!');
       setInlineEditingId(null);
       fetchData();
     } catch (error) {

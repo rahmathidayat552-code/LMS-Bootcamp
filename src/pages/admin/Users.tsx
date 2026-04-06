@@ -6,6 +6,10 @@ import { formatFullDate } from '../../utils/dateUtils';
 import * as XLSX from 'xlsx';
 import { Upload, Plus, Trash2, Search, Edit2, X, Download, ArrowLeft, CheckCircle, AlertCircle, Info } from 'lucide-react';
 import { toast } from 'sonner';
+import { motion, AnimatePresence } from 'motion/react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { ArrowUpDown, FileText } from 'lucide-react';
 
 interface Kelas {
   id: string;
@@ -32,6 +36,12 @@ export default function Users() {
   const [importTotal, setImportTotal] = useState(0);
   const [importRole, setImportRole] = useState<'GURU' | 'SISWA'>('SISWA');
   const [importKelasId, setImportKelasId] = useState('');
+  const [showImportSuccess, setShowImportSuccess] = useState(false);
+
+  const [filterRole, setFilterRole] = useState('');
+  const [filterKelasId, setFilterKelasId] = useState('');
+  const [sortBy, setSortBy] = useState<'nama_lengkap' | 'username'>('nama_lengkap');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // View state: 'list' | 'form' | 'preview' | 'import'
   const [view, setView] = useState<'list' | 'form' | 'preview' | 'import'>('list');
@@ -195,7 +205,7 @@ export default function Users() {
         }
       }
       
-      toast.success(editingId ? 'Data induk berhasil diperbarui!' : 'Data induk berhasil ditambahkan!');
+      toast.success(editingId ? 'Berhasil update data pengguna!' : 'Berhasil tambah data pengguna!');
       handleCloseForm();
       fetchData();
     } catch (error) {
@@ -211,6 +221,7 @@ export default function Users() {
     
     let successCount = 0;
     let errorCount = 0;
+    const newUsers: MasterUser[] = [];
 
     for (let i = 0; i < dataToImport.length; i++) {
       const row = dataToImport[i];
@@ -230,10 +241,13 @@ export default function Users() {
 
           let isRegistered = false;
           if (!docSnap.exists()) {
-            await setDoc(docRef, { ...updateData, is_registered: false, created_at: new Date().toISOString() });
+            const newDoc = { ...updateData, is_registered: false, created_at: new Date().toISOString() };
+            await setDoc(docRef, newDoc);
+            newUsers.push({ id: docId, ...newDoc } as MasterUser);
           } else {
             isRegistered = docSnap.data().is_registered || false;
             await setDoc(docRef, updateData, { merge: true });
+            newUsers.push({ id: docId, ...docSnap.data(), ...updateData } as MasterUser);
           }
 
           // Sync to users collection if registered
@@ -264,7 +278,21 @@ export default function Users() {
     }
 
     if (successCount > 0) {
-      toast.success(`${successCount} data induk berhasil diimpor!`);
+      setShowImportSuccess(true);
+      setTimeout(() => setShowImportSuccess(false), 3000);
+      
+      setUsers(prevUsers => {
+        const updatedUsers = [...prevUsers];
+        newUsers.forEach(newUser => {
+          const index = updatedUsers.findIndex(u => u.id === newUser.id);
+          if (index !== -1) {
+            updatedUsers[index] = newUser;
+          } else {
+            updatedUsers.push(newUser);
+          }
+        });
+        return updatedUsers;
+      });
     }
     if (errorCount > 0) {
       toast.error(`${errorCount} baris gagal diimpor karena data tidak valid.`);
@@ -273,7 +301,6 @@ export default function Users() {
     setIsImporting(false);
     setView('list');
     setPreviewData([]);
-    fetchData();
   };
 
   const handleConfirmImport = () => executeImport(previewData);
@@ -320,7 +347,7 @@ export default function Users() {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Yakin ingin menghapus data induk ini?')) {
+    if (window.confirm('Apakah Anda yakin untuk menghapus data ini?')) {
       try {
         await deleteDoc(doc(db, 'master_users', id));
         setUsers(users.filter(u => u.id !== id));
@@ -332,11 +359,77 @@ export default function Users() {
     }
   };
 
-  const filteredUsers = users.filter(u => 
-    u.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.role.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    const tableColumn = ["No", "Nama Lengkap", "NISN/NIP", "Role", "Kelas", "Tgl Lahir"];
+    const tableRows: any[] = [];
+
+    filteredUsers.forEach((user, index) => {
+      const userData = [
+        index + 1,
+        user.nama_lengkap,
+        user.username,
+        user.role,
+        getKelasName(user.kelas_id),
+        user.tanggal_lahir
+      ];
+      tableRows.push(userData);
+    });
+
+    doc.setFontSize(18);
+    doc.text("Data Induk Pengguna", 14, 22);
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    
+    let filterText = `Filter Role: ${filterRole || "Semua"}`;
+    if (filterKelasId) filterText += ` | Kelas: ${getKelasName(filterKelasId)}`;
+    
+    doc.text(filterText, 14, 30);
+    doc.text(`Total Pengguna: ${filteredUsers.length}`, 14, 35);
+    doc.text(`Tanggal Cetak: ${new Date().toLocaleString('id-ID')}`, 14, 40);
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 45,
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [37, 99, 235] }
+    });
+
+    doc.save(`Data_Induk_${new Date().getTime()}.pdf`);
+    toast.success('Berhasil mengekspor data ke PDF!');
+  };
+
+  const filteredUsers = users
+    .filter(u => {
+      const matchesSearch = 
+        u.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        u.role.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesRole = filterRole ? u.role === filterRole : true;
+      const matchesKelas = filterKelasId ? u.kelas_id === filterKelasId : true;
+      
+      return matchesSearch && matchesRole && matchesKelas;
+    })
+    .sort((a, b) => {
+      let valA = '';
+      let valB = '';
+      
+      if (sortBy === 'nama_lengkap') {
+        valA = a.nama_lengkap.toLowerCase();
+        valB = b.nama_lengkap.toLowerCase();
+      } else if (sortBy === 'username') {
+        valA = a.username.toLowerCase();
+        valB = b.username.toLowerCase();
+      }
+      
+      if (sortOrder === 'asc') {
+        return valA.localeCompare(valB);
+      } else {
+        return valB.localeCompare(valA);
+      }
+    });
 
   const getKelasName = (kelasId?: string) => {
     if (!kelasId) return '-';
@@ -660,17 +753,80 @@ export default function Users() {
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Cari nama, NISN/NIP, atau role..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0">
+          <div className="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4 flex-1">
+            <div className="relative max-w-md flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Cari nama, NIP/NISN..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <select
+                value={filterRole}
+                onChange={(e) => setFilterRole(e.target.value)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <option value="">Semua Role</option>
+                <option value="ADMIN">ADMIN</option>
+                <option value="GURU">GURU</option>
+                <option value="SISWA">SISWA</option>
+              </select>
+              {filterRole === 'SISWA' && (
+                <select
+                  value={filterKelasId}
+                  onChange={(e) => setFilterKelasId(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="">Semua Kelas</option>
+                  {kelasList.map(k => (
+                    <option key={k.id} value={k.id}>{k.nama_kelas}</option>
+                  ))}
+                </select>
+              )}
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => {
+                    if (sortBy === 'nama_lengkap') {
+                      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                    } else {
+                      setSortBy('nama_lengkap');
+                      setSortOrder('asc');
+                    }
+                  }}
+                  className={`px-3 py-2 rounded-lg border transition-colors flex items-center space-x-1 text-sm ${sortBy === 'nama_lengkap' ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-900/20 dark:border-blue-800' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'}`}
+                >
+                  <span>Nama</span>
+                  <ArrowUpDown className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => {
+                    if (sortBy === 'username') {
+                      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                    } else {
+                      setSortBy('username');
+                      setSortOrder('asc');
+                    }
+                  }}
+                  className={`px-3 py-2 rounded-lg border transition-colors flex items-center space-x-1 text-sm ${sortBy === 'username' ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-900/20 dark:border-blue-800' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'}`}
+                >
+                  <span>NISN/NIP</span>
+                  <ArrowUpDown className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
           </div>
+          <button
+            onClick={exportToPDF}
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+          >
+            <FileText className="w-4 h-4" />
+            <span>Export PDF</span>
+          </button>
         </div>
 
         <div className="overflow-x-auto">
@@ -746,6 +902,26 @@ export default function Users() {
           </table>
         </div>
       </div>
+
+      <AnimatePresence>
+        {showImportSuccess && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className="fixed inset-0 flex items-center justify-center pointer-events-none z-[9999]"
+          >
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-6 flex flex-col items-center space-y-4 min-w-[300px]">
+              <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
+              </div>
+              <p className="text-gray-900 dark:text-white font-medium text-lg text-center">
+                Data Pengguna Berhasil Diimpor!
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

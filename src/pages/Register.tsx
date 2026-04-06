@@ -104,7 +104,7 @@ export default function Register() {
         is_registered: true
       });
 
-      toast.success('Berhasil mendaftar! Silakan login.');
+      toast.success('Berhasil registrasi pengguna!');
       navigate('/login');
 
     } catch (error: any) {

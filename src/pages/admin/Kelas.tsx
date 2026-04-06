@@ -135,10 +135,10 @@ export default function Kelas() {
 
       if (editingId) {
         await setDoc(doc(db, 'kelas', editingId), kelasData, { merge: true });
-        toast.success('Kelas berhasil diperbarui!');
+        toast.success('Berhasil update data kelas!');
       } else {
         await addDoc(collection(db, 'kelas'), kelasData);
-        toast.success('Kelas berhasil ditambahkan!');
+        toast.success('Berhasil tambah data kelas!');
       }
       
       handleCloseForm();
@@ -222,7 +222,7 @@ export default function Kelas() {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Yakin ingin menghapus kelas ini? Semua data terkait mungkin akan terpengaruh.')) {
+    if (window.confirm('Apakah Anda yakin untuk menghapus data ini?')) {
       try {
         await deleteDoc(doc(db, 'kelas', id));
         setKelasList(kelasList.filter(k => k.id !== id));
