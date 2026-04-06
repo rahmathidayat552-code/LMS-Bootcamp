@@ -22,7 +22,7 @@ interface Modul {
 }
 
 export default function ModulSiswaList() {
-  const { profile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
   const [moduls, setModuls] = useState<Modul[]>([]);
   const [progress, setProgress] = useState<Record<string, number>>({});
   const [kelasName, setKelasName] = useState<string>('');
@@ -31,6 +31,9 @@ export default function ModulSiswaList() {
   useEffect(() => {
     const fetchModulsAndProgress = async () => {
       if (!profile) return;
+
+      // Refresh profile untuk mendapatkan kelas_id terbaru
+      await refreshProfile();
 
       try {
         // Fetch Kelas Name if exists
@@ -209,6 +212,12 @@ export default function ModulSiswaList() {
               </p>
             </div>
           )}
+          {/* Debug info untuk membantu troubleshoot */}
+          <div className="mt-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3 max-w-md mx-auto text-left text-xs text-gray-500">
+            <p><strong>Info Debug:</strong></p>
+            <p>Kelas ID Anda: <code>{profile?.kelas_id || '(kosong)'}</code></p>
+            <p>UID Anda: <code>{profile?.uid || '(kosong)'}</code></p>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

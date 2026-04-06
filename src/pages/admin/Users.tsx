@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, query, where, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { formatFullDate } from '../../utils/dateUtils';
@@ -153,6 +153,22 @@ export default function Users() {
       const docId = editingId || formData.username;
       
       await setDoc(doc(db, 'master_users', docId), userData, { merge: true });
+      
+      // Sinkronkan kelas_id ke collection 'users' jika sudah terdaftar
+      if (editingId) {
+        const existingUser = users.find(u => u.id === editingId);
+        if (existingUser?.is_registered) {
+          // Cari user di collection 'users' berdasarkan username
+          const usersQuery = query(collection(db, 'users'), where('username', '==', formData.username));
+          const usersSnapshot = await getDocs(usersQuery);
+          if (!usersSnapshot.empty) {
+            const userDoc = usersSnapshot.docs[0];
+            await updateDoc(doc(db, 'users', userDoc.id), {
+              kelas_id: formData.role === 'SISWA' ? formData.kelas_id : ''
+            });
+          }
+        }
+      }
       
       toast.success(editingId ? 'Data induk berhasil diperbarui!' : 'Data induk berhasil ditambahkan!');
       handleCloseForm();
@@ -347,14 +363,15 @@ export default function Users() {
               {formData.role === 'SISWA' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Kelas
+                    Kelas (Wajib untuk Siswa)
                   </label>
                   <select
+                    required
                     value={formData.kelas_id}
                     onChange={(e) => setFormData({...formData, kelas_id: e.target.value})}
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
-                    <option value="">-- Pilih Kelas --</option>
+                    <option value="" disabled>-- Pilih Kelas --</option>
                     {kelasList.map(kelas => (
                       <option key={kelas.id} value={kelas.id}>{kelas.nama_kelas}</option>
                     ))}

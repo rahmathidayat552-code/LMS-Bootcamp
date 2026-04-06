@@ -1,14 +1,69 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { BookOpen, Users, CheckCircle, Clock, Activity } from 'lucide-react';
-import { collection, query, orderBy, limit, onSnapshot, where } from 'firebase/firestore';
+import { BookOpen, Users, CheckCircle, Clock, Activity, Download, Database } from 'lucide-react';
+import { collection, query, orderBy, limit, onSnapshot, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { formatDistanceToNow } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
+import { toast } from 'sonner';
 
 export default function Dashboard() {
   const { profile } = useAuth();
   const [activities, setActivities] = useState<any[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportDatabase = async () => {
+    if (!window.confirm('Apakah Anda yakin ingin mengekspor seluruh database? Proses ini mungkin memakan waktu beberapa saat.')) {
+      return;
+    }
+
+    setIsExporting(true);
+    const toastId = toast.loading('Menyiapkan ekspor database...');
+
+    try {
+      const collections = [
+        'users',
+        'master_users',
+        'kelas',
+        'moduls',
+        'modul_items',
+        'kuis_soal',
+        'progres_siswa',
+        'activity_logs'
+      ];
+
+      const fullData: any = {};
+
+      for (const collectionName of collections) {
+        const snapshot = await getDocs(collection(db, collectionName));
+        fullData[collectionName] = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+      }
+
+      // Create JSON blob
+      const jsonString = JSON.stringify(fullData, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      // Create download link
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `lms_backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success('Database berhasil diekspor!', { id: toastId });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Gagal mengekspor database.', { id: toastId });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     if (profile?.role === 'GURU') {
@@ -47,27 +102,51 @@ export default function Dashboard() {
       </div>
 
       {profile.role === 'ADMIN' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-            <div className="flex items-center space-x-4">
-              <div className="p-3 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
-                <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+                  <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Pengguna</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">Kelola</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Pengguna</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">Kelola</p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-green-100 dark:bg-green-900/50 rounded-lg">
+                  <BookOpen className="w-6 h-6 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Kelas</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">Kelola</p>
+                </div>
               </div>
             </div>
           </div>
+
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-            <div className="flex items-center space-x-4">
-              <div className="p-3 bg-green-100 dark:bg-green-900/50 rounded-lg">
-                <BookOpen className="w-6 h-6 text-green-600 dark:text-green-400" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-orange-100 dark:bg-orange-900/50 rounded-lg">
+                  <Database className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-white">Backup Database</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Ekspor seluruh data aplikasi ke dalam format JSON.</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Kelas</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">Kelola</p>
-              </div>
+              <button
+                onClick={handleExportDatabase}
+                disabled={isExporting}
+                className="flex items-center space-x-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-400 text-white rounded-lg transition-colors shadow-sm"
+              >
+                <Download className="w-4 h-4" />
+                <span>{isExporting ? 'Mengekspor...' : 'Ekspor JSON'}</span>
+              </button>
             </div>
           </div>
         </div>
