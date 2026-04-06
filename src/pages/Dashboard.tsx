@@ -1,16 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { BookOpen, Users, CheckCircle, Clock, Activity, Download, Database } from 'lucide-react';
+import { BookOpen, Users, CheckCircle, Clock, Activity, Download, Database, BarChart2 } from 'lucide-react';
 import { collection, query, orderBy, limit, onSnapshot, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { formatDistanceToNow } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function Dashboard() {
   const { profile } = useAuth();
   const [activities, setActivities] = useState<any[]>([]);
   const [isExporting, setIsExporting] = useState(false);
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  // Admin Stats
+  const [adminStats, setAdminStats] = useState({
+    totalSiswa: 0,
+    totalGuru: 0,
+    totalModul: 0,
+    persentaseSelesai: 0,
+  });
+
+  // Guru Stats
+  const [guruStats, setGuruStats] = useState({
+    totalModulDibuat: 0,
+    totalModulSelesai: 0,
+    totalSiswaMengikuti: 0,
+    progressRateData: [] as any[],
+  });
+
+  // Siswa Stats
+  const [siswaStats, setSiswaStats] = useState({
+    totalModul: 0,
+    modulTerselesaikan: 0,
+    persentaseSelesai: 0,
+  });
 
   const handleExportDatabase = async () => {
     if (!window.confirm('Apakah Anda yakin ingin mengekspor seluruh database? Proses ini mungkin memakan waktu beberapa saat.')) {
@@ -66,29 +91,197 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    if (profile?.role === 'GURU') {
-      // Fetch recent activities
-      // Note: If you want to filter by kelas_id, you can add: where('kelas_id', '==', profile.kelas_id)
-      // But for now we'll fetch all activities or limit to recent ones.
-      // If filtering by kelas_id and ordering by created_at, a composite index is required in Firebase.
-      const q = query(
-        collection(db, 'activity_logs'),
-        orderBy('created_at', 'desc'),
-        limit(10)
-      );
+    if (!profile) return;
 
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const logs = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setActivities(logs);
-      }, (error) => {
-        console.error("Error fetching activities:", error);
-      });
+    const fetchStats = async () => {
+      setLoadingStats(true);
+      try {
+        if (profile.role === 'ADMIN') {
+          const usersSnap = await getDocs(collection(db, 'users'));
+          let siswaCount = 0;
+          let guruCount = 0;
+          usersSnap.forEach(doc => {
+            if (doc.data().role === 'SISWA') siswaCount++;
+            if (doc.data().role === 'GURU') guruCount++;
+          });
 
-      return () => unsubscribe();
-    }
+          const modulsSnap = await getDocs(collection(db, 'moduls'));
+          const totalModul = modulsSnap.size;
+
+          const progresSnap = await getDocs(collection(db, 'progres_siswa'));
+          let totalProgres = 0;
+          let selesaiProgres = 0;
+          progresSnap.forEach(doc => {
+            totalProgres++;
+            if (doc.data().status_selesai) selesaiProgres++;
+          });
+          const persentaseSelesai = totalProgres > 0 ? Math.round((selesaiProgres / totalProgres) * 100) : 0;
+
+          setAdminStats({
+            totalSiswa: siswaCount,
+            totalGuru: guruCount,
+            totalModul,
+            persentaseSelesai
+          });
+
+          // Fetch recent activities for all
+          const q = query(collection(db, 'activity_logs'), orderBy('created_at', 'desc'), limit(20));
+          const unsubscribe = onSnapshot(q, (snapshot) => {
+            setActivities(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+          });
+          return () => unsubscribe();
+
+        } else if (profile.role === 'GURU') {
+          const modulsQ = query(collection(db, 'moduls'), where('guru_id', '==', profile.uid));
+          const modulsSnap = await getDocs(modulsQ);
+          const moduls = modulsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          const totalModulDibuat = moduls.length;
+
+          const modulIds = moduls.map(m => m.id);
+          let totalModulSelesai = 0;
+          const uniqueSiswa = new Set<string>();
+          const progressRateData: any[] = [];
+
+          if (modulIds.length > 0) {
+            // We need to fetch items per modul to know total items
+            const itemsSnap = await getDocs(collection(db, 'modul_items'));
+            const itemsPerModul: Record<string, number> = {};
+            itemsSnap.forEach(doc => {
+              const data = doc.data();
+              if (modulIds.includes(data.modul_id)) {
+                itemsPerModul[data.modul_id] = (itemsPerModul[data.modul_id] || 0) + 1;
+              }
+            });
+
+            const progresSnap = await getDocs(collection(db, 'progres_siswa'));
+            const progresByModulSiswa: Record<string, Record<string, number>> = {};
+            
+            progresSnap.forEach(doc => {
+              const data = doc.data();
+              if (modulIds.includes(data.modul_id)) {
+                uniqueSiswa.add(data.siswa_id);
+                if (data.status_selesai) {
+                  if (!progresByModulSiswa[data.modul_id]) progresByModulSiswa[data.modul_id] = {};
+                  progresByModulSiswa[data.modul_id][data.siswa_id] = (progresByModulSiswa[data.modul_id][data.siswa_id] || 0) + 1;
+                }
+              }
+            });
+
+            moduls.forEach(modul => {
+              const totalItems = itemsPerModul[modul.id] || 0;
+              const siswaProgress = progresByModulSiswa[modul.id] || {};
+              let completedStudents = 0;
+              let totalProgressPercentage = 0;
+              let studentsStarted = Object.keys(siswaProgress).length;
+
+              Object.values(siswaProgress).forEach(completedItems => {
+                if (totalItems > 0 && completedItems >= totalItems) {
+                  completedStudents++;
+                  totalModulSelesai++;
+                }
+                if (totalItems > 0) {
+                  totalProgressPercentage += (completedItems / totalItems) * 100;
+                }
+              });
+
+              const avgProgress = studentsStarted > 0 ? Math.round(totalProgressPercentage / studentsStarted) : 0;
+              progressRateData.push({
+                name: (modul as any).judul_modul.substring(0, 15) + '...',
+                progress: avgProgress
+              });
+            });
+          }
+
+          setGuruStats({
+            totalModulDibuat,
+            totalModulSelesai,
+            totalSiswaMengikuti: uniqueSiswa.size,
+            progressRateData
+          });
+
+          // Fetch recent activities for guru's modules
+          const q = query(collection(db, 'activity_logs'), orderBy('created_at', 'desc'), limit(15));
+          const unsubscribe = onSnapshot(q, (snapshot) => {
+            const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            // Filter logs related to guru's modules
+            const guruLogs = logs.filter(log => modulIds.includes((log as any).modul_id));
+            setActivities(guruLogs);
+          });
+          return () => unsubscribe();
+
+        } else if (profile.role === 'SISWA') {
+          const modulsSnap = await getDocs(collection(db, 'moduls'));
+          let targetedModuls = 0;
+          const modulIds: string[] = [];
+          
+          modulsSnap.forEach(doc => {
+            const data = doc.data();
+            const isPublished = data.is_published === true || String(data.is_published) === 'true';
+            if (!isPublished) return;
+
+            const targetKelasIds = Array.isArray(data.target_kelas_ids) ? data.target_kelas_ids : [];
+            const targetSiswaIds = Array.isArray(data.target_siswa_ids) ? data.target_siswa_ids : [];
+            
+            let isMatch = false;
+            if (data.tipe_target === 'KELAS') {
+              isMatch = targetKelasIds.includes(profile.kelas_id);
+            } else if (data.tipe_target === 'SISWA') {
+              isMatch = targetSiswaIds.includes(profile.uid);
+            } else {
+              isMatch = targetKelasIds.includes(profile.kelas_id) || targetSiswaIds.includes(profile.uid);
+            }
+
+            if (isMatch) {
+              targetedModuls++;
+              modulIds.push(doc.id);
+            }
+          });
+
+          let modulTerselesaikan = 0;
+          if (modulIds.length > 0) {
+            const itemsSnap = await getDocs(collection(db, 'modul_items'));
+            const itemsPerModul: Record<string, number> = {};
+            itemsSnap.forEach(doc => {
+              const data = doc.data();
+              if (modulIds.includes(data.modul_id)) {
+                itemsPerModul[data.modul_id] = (itemsPerModul[data.modul_id] || 0) + 1;
+              }
+            });
+
+            const progresSnap = await getDocs(query(collection(db, 'progres_siswa'), where('siswa_id', '==', profile.uid)));
+            const completedItemsPerModul: Record<string, number> = {};
+            progresSnap.forEach(doc => {
+              const data = doc.data();
+              if (data.status_selesai && modulIds.includes(data.modul_id)) {
+                completedItemsPerModul[data.modul_id] = (completedItemsPerModul[data.modul_id] || 0) + 1;
+              }
+            });
+
+            modulIds.forEach(modulId => {
+              const totalItems = itemsPerModul[modulId] || 0;
+              const completedItems = completedItemsPerModul[modulId] || 0;
+              if (totalItems > 0 && completedItems >= totalItems) {
+                modulTerselesaikan++;
+              }
+            });
+          }
+
+          const persentaseSelesai = targetedModuls > 0 ? Math.round((modulTerselesaikan / targetedModuls) * 100) : 0;
+
+          setSiswaStats({
+            totalModul: targetedModuls,
+            modulTerselesaikan,
+            persentaseSelesai
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching stats:", error);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+
+    fetchStats();
   }, [profile]);
 
   if (!profile) return null;
@@ -103,15 +296,30 @@ export default function Dashboard() {
 
       {profile.role === 'ADMIN' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
               <div className="flex items-center space-x-4">
                 <div className="p-3 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
                   <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Pengguna</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">Kelola</p>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Siswa Terdaftar</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {loadingStats ? '...' : adminStats.totalSiswa}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-purple-100 dark:bg-purple-900/50 rounded-lg">
+                  <Users className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Guru Terdaftar</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {loadingStats ? '...' : adminStats.totalGuru}
+                  </p>
                 </div>
               </div>
             </div>
@@ -121,10 +329,71 @@ export default function Dashboard() {
                   <BookOpen className="w-6 h-6 text-green-600 dark:text-green-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Kelas</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">Kelola</p>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Modul</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {loadingStats ? '...' : adminStats.totalModul}
+                  </p>
                 </div>
               </div>
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-orange-100 dark:bg-orange-900/50 rounded-lg">
+                  <CheckCircle className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Penyelesaian Modul</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {loadingStats ? '...' : `${adminStats.persentaseSelesai}%`}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Activity className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Log Aktivitas Real-time</h2>
+              </div>
+            </div>
+            <div className="p-0">
+              {activities.length === 0 ? (
+                <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+                  Belum ada aktivitas terbaru.
+                </div>
+              ) : (
+                <ul className="divide-y divide-gray-100 dark:divide-gray-700 max-h-96 overflow-y-auto">
+                  {activities.map((log) => (
+                    <li key={log.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                      <div className="flex items-start space-x-3">
+                        <div className="flex-shrink-0 mt-1">
+                          <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-sm">
+                            {log.nama_siswa?.charAt(0).toUpperCase() || 'U'}
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                            {log.nama_siswa}
+                          </p>
+                          <p className="text-sm text-gray-600 dark:text-gray-300">
+                            {log.aksi}
+                          </p>
+                          {log.modul_judul && (
+                            <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
+                              Modul: {log.modul_judul}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex-shrink-0 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                          {log.created_at ? formatDistanceToNow(log.created_at.toDate(), { addSuffix: true, locale: idLocale }) : 'Baru saja'}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
 
@@ -161,21 +430,66 @@ export default function Dashboard() {
                   <BookOpen className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Modul Aktif</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">Kelola</p>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Modul Dibuat</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {loadingStats ? '...' : guruStats.totalModulDibuat}
+                  </p>
                 </div>
               </div>
             </div>
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
               <div className="flex items-center space-x-4">
-                <div className="p-3 bg-orange-100 dark:bg-orange-900/50 rounded-lg">
-                  <CheckCircle className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+                <div className="p-3 bg-green-100 dark:bg-green-900/50 rounded-lg">
+                  <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Tugas Menunggu</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">Penilaian</p>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Penyelesaian 100%</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {loadingStats ? '...' : guruStats.totalModulSelesai}
+                  </p>
                 </div>
               </div>
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+                  <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Siswa Mengikuti</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {loadingStats ? '...' : guruStats.totalSiswaMengikuti}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Progress Chart */}
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+            <div className="flex items-center space-x-2 mb-6">
+              <BarChart2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Rata-rata Progres per Modul</h2>
+            </div>
+            <div className="h-72 w-full">
+              {loadingStats ? (
+                <div className="w-full h-full flex items-center justify-center text-gray-500">Memuat grafik...</div>
+              ) : guruStats.progressRateData.length === 0 ? (
+                <div className="w-full h-full flex items-center justify-center text-gray-500">Belum ada data progres.</div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={guruStats.progressRateData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" opacity={0.2} />
+                    <XAxis dataKey="name" tick={{ fill: '#6B7280', fontSize: 12 }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fill: '#6B7280', fontSize: 12 }} tickLine={false} axisLine={false} domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+                    <Tooltip 
+                      cursor={{ fill: '#F3F4F6', opacity: 0.4 }}
+                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                    />
+                    <Bar dataKey="progress" fill="#3B82F6" radius={[4, 4, 0, 0]} name="Progres (%)" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
 
@@ -236,19 +550,36 @@ export default function Dashboard() {
                 <BookOpen className="w-6 h-6 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Modul Belajar</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">Lihat</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Modul</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {loadingStats ? '...' : siswaStats.totalModul}
+                </p>
               </div>
             </div>
           </div>
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
             <div className="flex items-center space-x-4">
               <div className="p-3 bg-green-100 dark:bg-green-900/50 rounded-lg">
-                <Clock className="w-6 h-6 text-green-600 dark:text-green-400" />
+                <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Progres</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">Lihat</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Modul Selesai</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {loadingStats ? '...' : siswaStats.modulTerselesaikan}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+            <div className="flex items-center space-x-4">
+              <div className="p-3 bg-orange-100 dark:bg-orange-900/50 rounded-lg">
+                <Activity className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Persentase Selesai</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {loadingStats ? '...' : `${siswaStats.persentaseSelesai}%`}
+                </p>
               </div>
             </div>
           </div>
