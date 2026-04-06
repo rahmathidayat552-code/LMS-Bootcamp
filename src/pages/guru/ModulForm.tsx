@@ -1259,6 +1259,7 @@ export default function ModulForm() {
       <AnimatePresence>
         {showPublishSuccess && (
           <motion.div
+            key="publish-success-toast"
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -1269,7 +1270,7 @@ export default function ModulForm() {
                 <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
               </div>
               <p className="text-gray-900 dark:text-white font-medium text-lg text-center">
-                Modul Berhasil Dipublikasi!
+                <span>Modul Berhasil Dipublikasi!</span>
               </p>
             </div>
           </motion.div>

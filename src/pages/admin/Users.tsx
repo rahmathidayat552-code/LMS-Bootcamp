@@ -906,6 +906,7 @@ export default function Users() {
       <AnimatePresence>
         {showImportSuccess && (
           <motion.div
+            key="import-success-toast"
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -916,7 +917,7 @@ export default function Users() {
                 <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
               </div>
               <p className="text-gray-900 dark:text-white font-medium text-lg text-center">
-                Data Pengguna Berhasil Diimpor!
+                <span>Data Pengguna Berhasil Diimpor!</span>
               </p>
             </div>
           </motion.div>

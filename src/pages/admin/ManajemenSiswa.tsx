@@ -374,28 +374,28 @@ export default function ManajemenSiswa() {
               {kelasList.sort((a, b) => a.nama_kelas.localeCompare(b.nama_kelas)).map(kelas => (
                 <tr key={kelas.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   <td className="px-6 py-3 text-sm font-medium text-gray-900 dark:text-white">
-                    {kelas.nama_kelas}
+                    <span>{kelas.nama_kelas}</span>
                   </td>
                   <td className="px-6 py-3 text-sm text-center font-bold text-blue-600 dark:text-blue-400">
-                    {getStudentCountByKelas(kelas.id)}
+                    <span>{getStudentCountByKelas(kelas.id)}</span>
                   </td>
                   <td className="px-6 py-3 text-right">
                     <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
-                      Aktif
+                      <span>Aktif</span>
                     </span>
                   </td>
                 </tr>
               ))}
               <tr className="bg-gray-50 dark:bg-gray-700/50 font-medium">
                 <td className="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">
-                  Belum Ada Kelas
+                  <span>Belum Ada Kelas</span>
                 </td>
                 <td className="px-6 py-3 text-sm text-center font-bold text-gray-600 dark:text-gray-400">
-                  {students.filter(s => !s.kelas_id).length}
+                  <span>{students.filter(s => !s.kelas_id).length}</span>
                 </td>
                 <td className="px-6 py-3 text-right">
                   <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-gray-200">
-                    Pending
+                    <span>Pending</span>
                   </span>
                 </td>
               </tr>

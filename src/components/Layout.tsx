@@ -192,6 +192,7 @@ export default function Layout() {
         {isLogoutModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
             <motion.div
+              key="logout-modal"
               initial={{ opacity: 0, scale: 0.5 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.5 }}
@@ -202,23 +203,23 @@ export default function Layout() {
                 <LogOut className="w-6 h-6 text-red-600 dark:text-red-400" />
               </div>
               <h3 className="text-lg font-bold text-center text-gray-900 dark:text-white mb-2">
-                Konfirmasi Keluar
+                <span>Konfirmasi Keluar</span>
               </h3>
               <p className="text-center text-gray-600 dark:text-gray-400 mb-6">
-                Apakah Anda yakin ingin keluar dari aplikasi?
+                <span>Apakah Anda yakin ingin keluar dari aplikasi?</span>
               </p>
               <div className="flex space-x-3">
                 <button
                   onClick={() => setIsLogoutModalOpen(false)}
                   className="flex-1 py-2 px-4 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg font-medium transition-colors"
                 >
-                  Batal
+                  <span>Batal</span>
                 </button>
                 <button
                   onClick={handleLogout}
                   className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
                 >
-                  Ya, Keluar
+                  <span>Ya, Keluar</span>
                 </button>
               </div>
             </motion.div>

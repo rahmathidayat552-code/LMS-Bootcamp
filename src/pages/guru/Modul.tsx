@@ -350,6 +350,7 @@ export default function ModulList() {
         {showDeleteModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
             <motion.div
+              key="delete-modal"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -360,11 +361,13 @@ export default function ModulList() {
                   <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-full">
                     <Trash2 className="w-6 h-6" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Hapus Modul?</h3>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white"><span>Hapus Modul?</span></h3>
                 </div>
                 
                 <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  Apakah Anda yakin ingin menghapus modul <span className="font-semibold text-gray-900 dark:text-white">"{selectedModulForDelete?.judul_modul}"</span>? Tindakan ini tidak dapat dibatalkan dan semua data terkait modul ini akan hilang.
+                  <span>Apakah Anda yakin ingin menghapus modul </span>
+                  <span className="font-semibold text-gray-900 dark:text-white">"{selectedModulForDelete?.judul_modul}"</span>
+                  <span>? Tindakan ini tidak dapat dibatalkan dan semua data terkait modul ini akan hilang.</span>
                 </p>
 
                 <div className="mb-6">
@@ -378,7 +381,7 @@ export default function ModulList() {
                     <span className="text-sm text-red-800 dark:text-red-300">
                       <strong>Hapus juga nilai dan progres siswa</strong>
                       <br />
-                      Centang ini jika Anda ingin menghapus semua data pengerjaan siswa yang sudah dinilai maupun belum pada modul ini.
+                      <span>Centang ini jika Anda ingin menghapus semua data pengerjaan siswa yang sudah dinilai maupun belum pada modul ini.</span>
                     </span>
                   </label>
                 </div>
@@ -389,7 +392,7 @@ export default function ModulList() {
                     disabled={isDeleting}
                     className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
                   >
-                    Batal
+                    <span>Batal</span>
                   </button>
                   <button
                     onClick={confirmDelete}
@@ -399,10 +402,10 @@ export default function ModulList() {
                     {isDeleting ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Menghapus...
+                        <span>Menghapus...</span>
                       </>
                     ) : (
-                      'Ya, Hapus'
+                      <span>Ya, Hapus</span>
                     )}
                   </button>
                 </div>
@@ -417,6 +420,7 @@ export default function ModulList() {
         {showCopyModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
             <motion.div
+              key="copy-modal"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -424,14 +428,16 @@ export default function ModulList() {
             >
               <div className="p-6">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Salin Modul</h3>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white"><span>Salin Modul</span></h3>
                   <button onClick={() => setShowCopyModal(false)} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
                     <X className="w-6 h-6" />
                   </button>
                 </div>
                 
                 <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  Anda akan menyalin modul <span className="font-semibold text-gray-900 dark:text-white">"{selectedModulForCopy?.judul_modul}"</span>.
+                  <span>Anda akan menyalin modul </span>
+                  <span className="font-semibold text-gray-900 dark:text-white">"{selectedModulForCopy?.judul_modul}"</span>
+                  <span>.</span>
                 </p>
 
                 {hasSubsequent && (
@@ -441,9 +447,9 @@ export default function ModulList() {
                         <BookOpen className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-blue-800 dark:text-blue-300">Modul Lanjutan Terdeteksi</p>
+                        <p className="text-sm font-medium text-blue-800 dark:text-blue-300"><span>Modul Lanjutan Terdeteksi</span></p>
                         <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                          Modul ini memiliki modul-modul lanjutan yang bergantung padanya. Apakah Anda juga ingin menyalin seluruh rangkaian modul tersebut?
+                          <span>Modul ini memiliki modul-modul lanjutan yang bergantung padanya. Apakah Anda juga ingin menyalin seluruh rangkaian modul tersebut?</span>
                         </p>
                         <label className="flex items-center space-x-2 mt-3 cursor-pointer group">
                           <input
@@ -452,7 +458,7 @@ export default function ModulList() {
                             onChange={(e) => setCopySubsequent(e.target.checked)}
                             className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                           />
-                          <span className="text-sm text-blue-700 dark:text-blue-300 group-hover:underline">Ya, salin juga modul lanjutan</span>
+                          <span className="text-sm text-blue-700 dark:text-blue-300 group-hover:underline"><span>Ya, salin juga modul lanjutan</span></span>
                         </label>
                       </div>
                     </div>
@@ -464,13 +470,13 @@ export default function ModulList() {
                     onClick={() => setShowCopyModal(false)}
                     className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   >
-                    Batal
+                    <span>Batal</span>
                   </button>
                   <button
                     onClick={handleCopy}
                     className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors flex items-center justify-center"
                   >
-                    Salin Sekarang
+                    <span>Salin Sekarang</span>
                   </button>
                 </div>
               </div>
@@ -482,13 +488,19 @@ export default function ModulList() {
       {/* Copying Overlay */}
       <AnimatePresence>
         {copying && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+          <motion.div
+            key="copying-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm"
+          >
             <div className="text-center">
               <Loader2 className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-              <p className="text-lg font-semibold text-gray-900 dark:text-white">Menyalin Modul...</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Mohon tunggu sebentar, kami sedang menduplikasi data Anda.</p>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white"><span>Menyalin Modul...</span></p>
+              <p className="text-sm text-gray-500 dark:text-gray-400"><span>Mohon tunggu sebentar, kami sedang menduplikasi data Anda.</span></p>
             </div>
-          </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
