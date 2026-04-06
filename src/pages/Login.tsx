@@ -30,22 +30,9 @@ export default function Login() {
       setError('');
       setLoading(true);
       await loginWithGoogle();
-      toast.success('Berhasil login!');
-      
-      // Log activity if profile is available (handled in useEffect or next render)
-      // We can't easily get profile here immediately without refactoring, 
-      // but we can rely on the fact that Google login is mostly for ADMIN.
-      // For SISWA, email login is used.
+      // loginWithGoogle now uses signInWithRedirect, so the page will redirect
+      // and this code won't continue until it returns.
     } catch (err: any) {
-      if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
-        setLoading(false);
-        return;
-      }
-      if (err.code === 'auth/popup-blocked') {
-        setError('Popup diblokir oleh browser. Silakan izinkan popup untuk situs ini.');
-        setLoading(false);
-        return;
-      }
       setError(err.message || 'Gagal masuk dengan Google');
       setLoading(false);
     }
