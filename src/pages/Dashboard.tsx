@@ -477,7 +477,7 @@ export default function Dashboard() {
               ) : guruStats.progressRateData.length === 0 ? (
                 <div className="w-full h-full flex items-center justify-center text-gray-500">Belum ada data progres.</div>
               ) : (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <BarChart data={guruStats.progressRateData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#374151" opacity={0.2} />
                     <XAxis dataKey="name" tick={{ fill: '#6B7280', fontSize: 12 }} tickLine={false} axisLine={false} />
