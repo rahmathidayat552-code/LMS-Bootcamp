@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, doc, setDoc, deleteDoc, query, where, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, query, where, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import { formatFullDate } from '../../utils/dateUtils';
@@ -30,9 +30,11 @@ export default function Users() {
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importTotal, setImportTotal] = useState(0);
+  const [importRole, setImportRole] = useState<'GURU' | 'SISWA'>('SISWA');
+  const [importKelasId, setImportKelasId] = useState('');
 
-  // View state: 'list' | 'form' | 'preview'
-  const [view, setView] = useState<'list' | 'form' | 'preview'>('list');
+  // View state: 'list' | 'form' | 'preview' | 'import'
+  const [view, setView] = useState<'list' | 'form' | 'preview' | 'import'>('list');
   const [previewData, setPreviewData] = useState<any[]>([]);
 
   // Form state
@@ -69,38 +71,29 @@ export default function Users() {
   }, []);
 
   const handleDownloadTemplate = () => {
-    const templateData = [
-      {
-        username: '1234567890',
-        nama_lengkap: 'Budi Santoso',
-        role: 'SISWA',
-        tanggal_lahir: '2005-08-17',
-        kelas_id: 'ID_KELAS_DARI_TABEL_KELAS'
-      },
-      {
-        username: '198001012005012001',
-        nama_lengkap: 'Siti Aminah, S.Pd',
-        role: 'GURU',
-        tanggal_lahir: '1980-01-01',
-        kelas_id: ''
-      }
-    ];
+    let templateData;
+    let fileName;
+    if (importRole === 'GURU') {
+      templateData = [{
+        'NIP': '198001012005012001',
+        'Nama Lengkap': 'Siti Aminah, S.Pd',
+        'Tanggal Lahir (YYYY-MM-DD)': '1980-01-01'
+      }];
+      fileName = 'Template_Guru.xlsx';
+    } else {
+      templateData = [{
+        'NISN': '1234567890',
+        'Nama Lengkap': 'Budi Santoso',
+        'Tanggal Lahir (YYYY-MM-DD)': '2005-08-17'
+      }];
+      fileName = 'Template_Siswa.xlsx';
+    }
 
     const ws = XLSX.utils.json_to_sheet(templateData);
-    
-    // Set column widths
-    ws['!cols'] = [
-      { wch: 20 }, // username
-      { wch: 30 }, // nama_lengkap
-      { wch: 10 }, // role
-      { wch: 15 }, // tanggal_lahir
-      { wch: 30 }  // kelas_id
-    ];
-
+    ws['!cols'] = [{ wch: 20 }, { wch: 30 }, { wch: 25 }];
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Template_Data_Induk');
-    
-    XLSX.writeFile(wb, 'Template_Import_Data_Induk.xlsx');
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    XLSX.writeFile(wb, fileName);
   };
 
   const handleOpenForm = (user?: MasterUser) => {
@@ -149,23 +142,55 @@ export default function Users() {
         is_registered: editingId ? (users.find(u => u.id === editingId)?.is_registered || false) : false
       };
 
-      // Use username (NISN/NIP) as the document ID
-      const docId = editingId || formData.username;
-      
-      await setDoc(doc(db, 'master_users', docId), userData, { merge: true });
-      
-      // Sinkronkan kelas_id ke collection 'users' jika sudah terdaftar
-      if (editingId) {
+      if (editingId && editingId !== formData.username) {
+        // Username (NISN/NIP) has changed
+        // 1. Check if new username already exists
+        const newDocRef = doc(db, 'master_users', formData.username);
+        const newDocSnap = await getDoc(newDocRef);
+        if (newDocSnap.exists()) {
+          toast.error('NISN/NIP sudah digunakan oleh pengguna lain!');
+          return;
+        }
+
+        // 2. Create new document
+        await setDoc(newDocRef, userData);
+
+        // 3. Delete old document
+        await deleteDoc(doc(db, 'master_users', editingId));
+
+        // 4. Update in 'users' collection if registered
         const existingUser = users.find(u => u.id === editingId);
         if (existingUser?.is_registered) {
-          // Cari user di collection 'users' berdasarkan username
-          const usersQuery = query(collection(db, 'users'), where('username', '==', formData.username));
+          const usersQuery = query(collection(db, 'users'), where('username', '==', editingId));
           const usersSnapshot = await getDocs(usersQuery);
           if (!usersSnapshot.empty) {
             const userDoc = usersSnapshot.docs[0];
             await updateDoc(doc(db, 'users', userDoc.id), {
+              username: formData.username,
+              role: formData.role,
               kelas_id: formData.role === 'SISWA' ? formData.kelas_id : ''
             });
+          }
+        }
+      } else {
+        // Normal update or create
+        const docId = editingId || formData.username;
+        await setDoc(doc(db, 'master_users', docId), userData, { merge: true });
+        
+        // Sinkronkan kelas_id dan role ke collection 'users' jika sudah terdaftar
+        if (editingId) {
+          const existingUser = users.find(u => u.id === editingId);
+          if (existingUser?.is_registered) {
+            // Cari user di collection 'users' berdasarkan username
+            const usersQuery = query(collection(db, 'users'), where('username', '==', formData.username));
+            const usersSnapshot = await getDocs(usersQuery);
+            if (!usersSnapshot.empty) {
+              const userDoc = usersSnapshot.docs[0];
+              await updateDoc(doc(db, 'users', userDoc.id), {
+                role: formData.role,
+                kelas_id: formData.role === 'SISWA' ? formData.kelas_id : ''
+              });
+            }
           }
         }
       }
@@ -179,53 +204,50 @@ export default function Users() {
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws) as any[];
-        
-        setPreviewData(data);
-        setView('preview');
-      } catch (error) {
-        console.error("Error importing data:", error);
-        toast.error('Gagal membaca file Excel. Pastikan format benar.');
-      }
-    };
-    reader.readAsBinaryString(file);
-    e.target.value = ''; // Reset input
-  };
-
-  const handleConfirmImport = async () => {
+  const executeImport = async (dataToImport: any[]) => {
     setIsImporting(true);
     setImportProgress(0);
-    setImportTotal(previewData.length);
+    setImportTotal(dataToImport.length);
     
     let successCount = 0;
     let errorCount = 0;
 
-    for (let i = 0; i < previewData.length; i++) {
-      const row = previewData[i];
+    for (let i = 0; i < dataToImport.length; i++) {
+      const row = dataToImport[i];
       if (row.username && row.nama_lengkap && row.role && row.tanggal_lahir) {
         try {
           const docId = String(row.username);
-          const newDocRef = doc(db, 'master_users', docId);
-          await setDoc(newDocRef, {
+          const docRef = doc(db, 'master_users', docId);
+          const docSnap = await getDoc(docRef);
+          
+          const updateData: any = {
             username: docId,
             nama_lengkap: row.nama_lengkap,
             role: row.role.toUpperCase(),
             tanggal_lahir: row.tanggal_lahir,
-            kelas_id: row.kelas_id || '',
-            is_registered: false,
-            created_at: new Date().toISOString() // ISO string for DB
-          }, { merge: true });
+          };
+          if (row.kelas_id) updateData.kelas_id = row.kelas_id;
+
+          let isRegistered = false;
+          if (!docSnap.exists()) {
+            await setDoc(docRef, { ...updateData, is_registered: false, created_at: new Date().toISOString() });
+          } else {
+            isRegistered = docSnap.data().is_registered || false;
+            await setDoc(docRef, updateData, { merge: true });
+          }
+
+          // Sync to users collection if registered
+          if (isRegistered && updateData.role === 'SISWA' && updateData.kelas_id) {
+            const usersQuery = query(collection(db, 'users'), where('username', '==', docId));
+            const usersSnapshot = await getDocs(usersQuery);
+            if (!usersSnapshot.empty) {
+              const userDoc = usersSnapshot.docs[0];
+              await updateDoc(doc(db, 'users', userDoc.id), {
+                kelas_id: updateData.kelas_id
+              });
+            }
+          }
+
           successCount++;
         } catch (error) {
           errorCount++;
@@ -247,6 +269,49 @@ export default function Users() {
     setView('list');
     setPreviewData([]);
     fetchData();
+  };
+
+  const handleConfirmImport = () => executeImport(previewData);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws) as any[];
+        
+        const mappedData = data.map(row => {
+          const username = importRole === 'GURU' ? (row.NIP || row.nip || row.Nip) : (row.NISN || row.nisn || row.Nisn);
+          return {
+            username: String(username || '').trim(),
+            nama_lengkap: String(row['Nama Lengkap'] || row.nama_lengkap || row.nama || '').trim(),
+            tanggal_lahir: String(row['Tanggal Lahir (YYYY-MM-DD)'] || row.tanggal_lahir || '').trim(),
+            role: importRole,
+            kelas_id: importRole === 'SISWA' ? importKelasId : ''
+          };
+        });
+
+        const allValid = mappedData.length > 0 && mappedData.every(r => r.username && r.nama_lengkap && r.tanggal_lahir);
+
+        if (allValid) {
+          await executeImport(mappedData);
+        } else {
+          setPreviewData(mappedData);
+          setView('preview');
+        }
+      } catch (error) {
+        console.error("Error importing data:", error);
+        toast.error('Gagal membaca file Excel. Pastikan format benar.');
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = ''; // Reset input
   };
 
   const handleDelete = async (id: string) => {
@@ -401,6 +466,71 @@ export default function Users() {
     );
   }
 
+  if (view === 'import') {
+    return (
+      <div className="space-y-6 max-w-2xl mx-auto">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Import Data Induk</h1>
+          <button 
+            onClick={() => setView('list')}
+            className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Kembali</span>
+          </button>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Jenis Data yang Diimpor</label>
+              <div className="flex space-x-6">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input type="radio" checked={importRole === 'SISWA'} onChange={() => setImportRole('SISWA')} className="text-blue-600 focus:ring-blue-500 w-4 h-4" />
+                  <span className="text-base dark:text-gray-200">Siswa</span>
+                </label>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input type="radio" checked={importRole === 'GURU'} onChange={() => setImportRole('GURU')} className="text-blue-600 focus:ring-blue-500 w-4 h-4" />
+                  <span className="text-base dark:text-gray-200">Guru</span>
+                </label>
+              </div>
+            </div>
+
+            {importRole === 'SISWA' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Pilih Kelas (Opsional)</label>
+                <select
+                  value={importKelasId}
+                  onChange={(e) => setImportKelasId(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">-- Tanpa Kelas (Atur Nanti) --</option>
+                  {kelasList.map(kelas => (
+                    <option key={kelas.id} value={kelas.id}>{kelas.nama_kelas}</option>
+                  ))}
+                </select>
+                <p className="text-sm text-gray-500 mt-2">Jika dipilih, semua siswa dalam file import akan otomatis dimasukkan ke kelas ini.</p>
+              </div>
+            )}
+
+            <div className="pt-6 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row gap-4">
+              <button onClick={handleDownloadTemplate} className="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-4 py-3 rounded-lg flex items-center justify-center space-x-2 transition-colors">
+                <Download className="w-5 h-5" />
+                <span>Download Template {importRole === 'SISWA' ? 'Siswa' : 'Guru'}</span>
+              </button>
+              
+              <label className="flex-1 cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg flex items-center justify-center space-x-2 transition-colors">
+                <Upload className="w-5 h-5" />
+                <span>Pilih File Excel & Import</span>
+                <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleFileUpload} />
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (view === 'preview') {
     return (
       <div className="space-y-6">
@@ -508,17 +638,12 @@ export default function Users() {
         
         <div className="flex items-center space-x-3">
           <button 
-            onClick={handleDownloadTemplate}
-            className="bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+            onClick={() => setView('import')}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
           >
-            <Download className="w-4 h-4" />
-            <span className="hidden sm:inline">Template</span>
-          </button>
-          <label className="cursor-pointer bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors">
             <Upload className="w-4 h-4" />
-            <span className="hidden sm:inline">Import Excel</span>
-            <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleFileUpload} />
-          </label>
+            <span className="hidden sm:inline">Import Data</span>
+          </button>
           <button 
             onClick={() => handleOpenForm()}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
