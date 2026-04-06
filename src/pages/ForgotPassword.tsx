@@ -20,7 +20,14 @@ export default function ForgotPassword() {
 
     setLoading(true);
     try {
-      await sendPasswordResetEmail(auth, email);
+      // Konfigurasi agar setelah reset, user bisa klik tombol "Kembali ke Aplikasi"
+      const actionCodeSettings = {
+        // URL tujuan setelah user selesai reset password (halaman login di Vercel)
+        url: window.location.origin + '/#/login', 
+        handleCodeInApp: false,
+      };
+
+      await sendPasswordResetEmail(auth, email, actionCodeSettings);
       setIsSent(true);
       toast.success('Email reset password telah dikirim!');
     } catch (error: any) {
