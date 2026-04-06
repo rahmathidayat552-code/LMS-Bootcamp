@@ -134,6 +134,10 @@ export default function ManajemenSiswa() {
     return kelas ? kelas.nama_kelas : '-';
   };
 
+  const getStudentCountByKelas = (kelasId: string) => {
+    return students.filter(s => s.kelas_id === kelasId).length;
+  };
+
   const filteredStudents = students.filter(s => 
     s.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -281,6 +285,31 @@ export default function ManajemenSiswa() {
             <span>Edit Kelas ({selectedStudents.length})</span>
           </button>
         )}
+      </div>
+
+      {/* Ringkasan Kelas */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Daftar Kelas & Jumlah Siswa</h2>
+        </div>
+        <div className="p-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {kelasList.sort((a, b) => a.nama_kelas.localeCompare(b.nama_kelas)).map(kelas => (
+              <div key={kelas.id} className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg p-3 text-center">
+                <div className="text-sm font-medium text-blue-900 dark:text-blue-100">{kelas.nama_kelas}</div>
+                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{getStudentCountByKelas(kelas.id)}</div>
+                <div className="text-xs text-blue-500 dark:text-blue-300">Siswa</div>
+              </div>
+            ))}
+            <div className="bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg p-3 text-center">
+              <div className="text-sm font-medium text-gray-700 dark:text-gray-300">Belum Ada Kelas</div>
+              <div className="text-2xl font-bold text-gray-600 dark:text-gray-400 mt-1">
+                {students.filter(s => !s.kelas_id).length}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Siswa</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">

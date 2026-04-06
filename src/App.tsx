@@ -20,6 +20,8 @@ import Profile from './pages/Profile';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toaster } from 'sonner';
 
+import ForgotPassword from './pages/ForgotPassword';
+
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
   const { user, profile, loading } = useAuth();
   const location = useLocation();
@@ -49,6 +51,7 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
             
             <Route path="/" element={
               <ProtectedRoute>

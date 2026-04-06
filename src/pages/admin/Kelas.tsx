@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, doc, setDoc, deleteDoc, addDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, addDoc, query, where } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreErrorHandler';
 import * as XLSX from 'xlsx';
@@ -11,6 +11,7 @@ interface Kelas {
   nama_kelas: string;
   tingkat: number;
   created_at: string;
+  jumlah_siswa?: number;
 }
 
 export default function Kelas() {
@@ -34,8 +35,26 @@ export default function Kelas() {
 
   const fetchKelas = async () => {
     try {
-      const querySnapshot = await getDocs(collection(db, 'kelas'));
-      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Kelas));
+      const [kelasSnapshot, usersSnapshot] = await Promise.all([
+        getDocs(collection(db, 'kelas')),
+        getDocs(query(collection(db, 'users'), where('role', '==', 'SISWA')))
+      ]);
+      
+      // Calculate student counts per class
+      const studentCounts: Record<string, number> = {};
+      usersSnapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.kelas_id) {
+          studentCounts[data.kelas_id] = (studentCounts[data.kelas_id] || 0) + 1;
+        }
+      });
+
+      const data = kelasSnapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data(),
+        jumlah_siswa: studentCounts[doc.id] || 0
+      } as Kelas & { jumlah_siswa?: number }));
+      
       // Sort by tingkat then nama_kelas
       data.sort((a, b) => {
         if (a.tingkat !== b.tingkat) return a.tingkat - b.tingkat;
@@ -435,17 +454,18 @@ export default function Kelas() {
               <tr className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
                 <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tingkat</th>
                 <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Nama Kelas</th>
+                <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Jumlah Siswa</th>
                 <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {loading ? (
                 <tr>
-                  <td colSpan={3} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">Memuat data...</td>
+                  <td colSpan={4} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">Memuat data...</td>
                 </tr>
               ) : filteredKelas.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">Tidak ada kelas ditemukan.</td>
+                  <td colSpan={4} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">Tidak ada kelas ditemukan.</td>
                 </tr>
               ) : (
                 filteredKelas.map((kelas) => (
@@ -457,6 +477,11 @@ export default function Kelas() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="font-medium text-gray-900 dark:text-white">{kelas.nama_kelas}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-600 dark:text-gray-300">
+                        {kelas.jumlah_siswa || 0} Siswa
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center space-x-3">
