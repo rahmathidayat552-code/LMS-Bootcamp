@@ -61,7 +61,23 @@ export default function ModulSiswaList() {
           ...doc.data()
         })) as Modul[];
 
-        console.log("Total Moduls Fetched from Firestore:", fetchedModuls.length);
+        // Add Mock Tutorial Modul
+        const tutorialModul: Modul = {
+          id: 'tutorial-bahasa-indonesia',
+          judul_modul: '[CONTOH] Pengenalan LMS: Belajar Bahasa Indonesia',
+          mata_pelajaran: 'Bahasa Indonesia',
+          deskripsi: 'Modul contoh ini akan membimbing Anda cara menggunakan LMS SMKN 9. Ikuti petunjuk di setiap materi untuk memahami cara menyelesaikan modul.',
+          guru_id: 'system',
+          target_kelas_ids: [],
+          target_siswa_ids: [profile.uid],
+          tipe_target: 'SISWA',
+          is_published: true,
+          ikon: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?q=80&w=1000&auto=format&fit=crop',
+          created_at: new Date()
+        };
+        fetchedModuls.push(tutorialModul);
+
+        console.log("Total Moduls Fetched from Firestore + Mock:", fetchedModuls.length);
         console.log("Raw Fetched Moduls:", fetchedModuls);
         console.log("Student Profile:", profile);
 
@@ -154,12 +170,18 @@ export default function ModulSiswaList() {
           // For a real app with many modules, you might need to chunk this or fetch differently.
           // Here we'll do individual queries for simplicity and correctness.
           await Promise.all(modulIds.map(async (modulId) => {
-            const itemsRef = collection(db, 'modul_items');
-            const qItems = query(itemsRef, where('modul_id', '==', modulId));
-            const itemsSnapshot = await getDocs(qItems);
-            const totalItems = itemsSnapshot.size;
-            const completedItems = progressCounts[modulId]?.size || 0;
+            let totalItems = 0;
             
+            if (modulId === 'tutorial-bahasa-indonesia') {
+              totalItems = 5; // We defined 5 items for the tutorial
+            } else {
+              const itemsRef = collection(db, 'modul_items');
+              const qItems = query(itemsRef, where('modul_id', '==', modulId));
+              const itemsSnapshot = await getDocs(qItems);
+              totalItems = itemsSnapshot.size;
+            }
+
+            const completedItems = progressCounts[modulId]?.size || 0;
             percentages[modulId] = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
           }));
         }

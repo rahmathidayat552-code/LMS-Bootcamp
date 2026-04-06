@@ -62,6 +62,104 @@ export default function ModulSiswaDetail() {
       if (!id || !profile) return;
 
       try {
+        // Handle Mock Tutorial Modul
+        if (id === 'tutorial-bahasa-indonesia') {
+          const mockModul = {
+            id: 'tutorial-bahasa-indonesia',
+            judul_modul: '[CONTOH] Pengenalan LMS: Belajar Bahasa Indonesia',
+            mata_pelajaran: 'Bahasa Indonesia',
+            deskripsi: 'Modul contoh ini akan membimbing Anda cara menggunakan LMS SMKN 9. Ikuti petunjuk di setiap materi untuk memahami cara menyelesaikan modul.',
+            guru_id: 'system',
+            is_published: true,
+            ikon: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?q=80&w=1000&auto=format&fit=crop'
+          };
+          setModul(mockModul);
+
+          const mockItems: ModulItem[] = [
+            {
+              id: 'tutorial-item-1',
+              modul_id: 'tutorial-bahasa-indonesia',
+              tipe_item: 'MATERI',
+              judul_item: 'Selamat Datang di LMS SMKN 9',
+              deskripsi: 'Petunjuk: Baca materi ini sampai selesai, lalu klik tombol "Lanjutkan" di bawah untuk menandai materi ini sebagai selesai.',
+              konten: '<h2>Selamat Datang!</h2><p>Ini adalah modul tutorial untuk membantu Anda memahami cara belajar di LMS ini.</p><p><strong>Apa itu LMS?</strong> LMS (Learning Management System) adalah platform digital yang digunakan untuk mengakses materi belajar, mengerjakan kuis, dan mengumpulkan tugas secara online.</p><p><strong>Cara Belajar:</strong> Di setiap modul, Anda akan menemukan berbagai jenis konten seperti teks, video, atau dokumen. Bacalah dengan teliti dan ikuti instruksi yang diberikan.</p>',
+              urutan: 1
+            },
+            {
+              id: 'tutorial-item-2',
+              modul_id: 'tutorial-bahasa-indonesia',
+              tipe_item: 'PDF',
+              judul_item: 'Panduan Belajar Bahasa Indonesia',
+              deskripsi: 'Petunjuk: Klik tombol "Buka Dokumen PDF" untuk membaca materi dalam format PDF. Setelah selesai membaca, klik "Lanjutkan".',
+              konten: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+              urutan: 2
+            },
+            {
+              id: 'tutorial-item-3',
+              modul_id: 'tutorial-bahasa-indonesia',
+              tipe_item: 'YOUTUBE',
+              judul_item: 'Video Pembelajaran: Struktur Teks Laporan',
+              deskripsi: 'Petunjuk: Tonton video ini sampai selesai untuk memahami materi. Setelah itu, klik "Lanjutkan".',
+              konten: 'https://www.youtube.com/watch?v=8jP8CC266Ho',
+              urutan: 3
+            },
+            {
+              id: 'tutorial-item-4',
+              modul_id: 'tutorial-bahasa-indonesia',
+              tipe_item: 'KUIS',
+              judul_item: 'Kuis Singkat: Pemahaman Materi',
+              deskripsi: 'Petunjuk: Pilih jawaban yang benar untuk setiap pertanyaan. Klik "Kumpulkan Jawaban" untuk melihat nilai Anda, lalu klik "Lanjutkan".',
+              konten: JSON.stringify([
+                {
+                  pertanyaan: "Apa yang dimaksud dengan teks laporan hasil observasi?",
+                  opsi_a: "Teks yang berisi khayalan",
+                  opsi_b: "Teks yang berisi hasil pengamatan",
+                  opsi_c: "Teks yang berisi puisi",
+                  opsi_d: "Teks yang berisi iklan",
+                  kunci_jawaban: "B",
+                  bobot_nilai: 50
+                },
+                {
+                  pertanyaan: "Struktur teks laporan hasil observasi yang pertama adalah...",
+                  opsi_a: "Definisi Umum",
+                  opsi_b: "Deskripsi Bagian",
+                  opsi_c: "Deskripsi Manfaat",
+                  opsi_d: "Penutup",
+                  kunci_jawaban: "A",
+                  bobot_nilai: 50
+                }
+              ]),
+              urutan: 4
+            },
+            {
+              id: 'tutorial-item-5',
+              modul_id: 'tutorial-bahasa-indonesia',
+              tipe_item: 'TUGAS',
+              judul_item: 'Tugas: Membuat Ringkasan',
+              deskripsi: 'Petunjuk: Buatlah ringkasan materi yang telah dipelajari. Anda bisa mengumpulkan dalam bentuk link (Google Drive) atau upload file PDF/Word. Klik "Kumpulkan Tugas" untuk menyelesaikan.',
+              konten: JSON.stringify({
+                allow_link: true,
+                allow_file: true,
+                allowed_extensions: ["pdf", "doc", "docx"]
+              }),
+              urutan: 5
+            }
+          ];
+          setItems(mockItems);
+
+          // Fetch Progress for Mock Modul
+          const progressRef = collection(db, 'progres_siswa');
+          const qProgress = query(progressRef, where('modul_id', '==', id), where('siswa_id', '==', profile.uid));
+          const snapshotProgress = await getDocs(qProgress);
+          const fetchedProgress: Record<string, any> = {};
+          snapshotProgress.docs.forEach(doc => {
+            fetchedProgress[doc.data().modul_item_id] = doc.data();
+          });
+          setProgress(fetchedProgress);
+          setLoading(false);
+          return;
+        }
+
         // Fetch Modul
         const modulDoc = await getDoc(doc(db, 'moduls', id));
         if (!modulDoc.exists()) {
