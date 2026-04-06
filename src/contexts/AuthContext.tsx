@@ -61,14 +61,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPersistence(auth, browserLocalPersistence).catch(console.error);
 
     // Handle redirect result for Google Login
-    getRedirectResult(auth).catch((error) => {
+    getRedirectResult(auth).catch((error: any) => {
       console.error("Error getting redirect result:", error);
+      if (error.code !== 'auth/redirect-cancelled-by-user') {
+        toast.error('Gagal menyelesaikan login Google: ' + error.message);
+      }
     });
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
         try {
+          console.log("User authenticated, fetching profile for:", firebaseUser.email);
           const userDocRef = doc(db, 'users', firebaseUser.uid);
           
           // Retry logic for fetching user profile (handles registration race condition)
@@ -76,17 +80,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           let retries = 0;
           
           while (!userDoc.exists() && retries < 3) {
+            console.log(`Profile not found, retry ${retries + 1}...`);
             await new Promise(resolve => setTimeout(resolve, 1000));
             userDoc = await getDoc(userDocRef);
             retries++;
           }
           
           if (userDoc.exists()) {
+            console.log("Profile found:", userDoc.data());
             setProfile({ uid: firebaseUser.uid, ...userDoc.data() } as UserProfile);
           } else {
-            // Check if this is the default admin logging in with Google
-            const isDefaultAdmin = firebaseUser.email === 'rahmathidayat552@guru.smk.belajar.id';
+            console.log("Profile not found after retries. Checking if default admin...");
+            // Check if this is the default admin logging in with Google (Case-insensitive check)
+            const adminEmail = 'rahmathidayat552@guru.smk.belajar.id'.toLowerCase().trim();
+            const currentUserEmail = (firebaseUser.email || '').toLowerCase().trim();
+            
+            const isDefaultAdmin = currentUserEmail === adminEmail;
+            
             if (isDefaultAdmin) {
+              console.log("Default admin detected, creating profile...");
               const newProfile = {
                 email: firebaseUser.email || '',
                 nama_lengkap: firebaseUser.displayName || 'Admin',
@@ -94,18 +106,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 created_at: new Date().toISOString()
               };
               await setDoc(userDocRef, newProfile);
+              console.log("Admin profile created successfully");
               setProfile({ uid: firebaseUser.uid, ...newProfile } as UserProfile);
             } else {
-              // If not admin and no profile exists after retries, they must register first
-              // We will sign them out if they try to bypass registration with Google
+              console.warn("User not registered and not default admin. Signing out.");
+              toast.error('Akun Google ini belum terdaftar. Silakan registrasi terlebih dahulu.');
               await signOut(auth);
               setProfile(null);
               setUser(null);
-              console.error('Silakan registrasi terlebih dahulu menggunakan NISN/NIP.');
             }
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error("Error fetching user profile:", error);
+          toast.error('Gagal memuat profil: ' + (error.message || 'Error tidak diketahui'));
         }
       } else {
         setProfile(null);

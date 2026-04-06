@@ -17,21 +17,27 @@ export default function Login() {
   const [password, setPassword] = useState('');
 
   const from = location.state?.from || '/';
+  const isIframe = window.self !== window.top;
 
   // Redirect if already logged in
   React.useEffect(() => {
+    console.log("Login page auth state:", { hasUser: !!user, hasProfile: !!profile });
     if (user && profile) {
       navigate(from, { replace: true });
     }
   }, [user, profile, navigate, from]);
 
   const handleGoogleLogin = async () => {
+    if (isIframe) {
+      toast.error('Login Google tidak dapat dilakukan di dalam Preview. Silakan buka aplikasi di tab baru (Open in new tab).', {
+        duration: 5000
+      });
+      return;
+    }
     try {
       setError('');
       setLoading(true);
       await loginWithGoogle();
-      // loginWithGoogle now uses signInWithRedirect, so the page will redirect
-      // and this code won't continue until it returns.
     } catch (err: any) {
       setError(err.message || 'Gagal masuk dengan Google');
       setLoading(false);

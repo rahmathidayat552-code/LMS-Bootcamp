@@ -3,11 +3,10 @@ import { collection, query, where, getDocs, doc, writeBatch, getDoc } from 'fire
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, useParams, useOutletContext } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Save, GripVertical, ArrowUp, ArrowDown, Image as ImageIcon, X, Search, Youtube, ExternalLink, ChevronLeft, ChevronRight, BookOpen, Users, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, GripVertical, ArrowUp, ArrowDown, Image as ImageIcon, X, Youtube, ExternalLink, ChevronLeft, ChevronRight, BookOpen, Users, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { GoogleGenAI, Type } from "@google/genai";
 import { motion, AnimatePresence } from 'motion/react';
 
 interface Kelas {
@@ -103,98 +102,7 @@ export default function ModulForm() {
   const [siswaList, setSiswaList] = useState<Siswa[]>([]);
   const [existingModuls, setExistingModuls] = useState<any[]>([]);
   
-  // YouTube Search State
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
   const [showPublishSuccess, setShowPublishSuccess] = useState(false);
-
-  const searchYouTube = async (query: string) => {
-    if (!query) return;
-    setIsSearching(true);
-    setSearchResults([]);
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Lakukan pencarian Google Search dengan query: "site:youtube.com ${query}".\nAmbil 5 hasil pencarian video YouTube teratas.\nKembalikan dalam format JSON array dengan objek yang memiliki properti:\n- 'title': Judul video\n- 'url': URL video YouTube yang benar-benar valid (harus persis sama dengan URL di hasil pencarian)\n- 'thumbnail': URL thumbnail YouTube (biasanya https://i.ytimg.com/vi/<VIDEO_ID>/hqdefault.jpg)\n\nSangat penting: JANGAN mengarang URL. Hanya gunakan URL yang benar-benar dikembalikan oleh Google Search.`,
-        config: {
-          tools: [{ googleSearch: {} }],
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                title: { type: Type.STRING },
-                url: { type: Type.STRING },
-                thumbnail: { type: Type.STRING }
-              },
-              required: ["title", "url"]
-            }
-          }
-        }
-      });
-      
-      let results = JSON.parse(response.text || '[]');
-      if (!Array.isArray(results)) results = [];
-      
-      // Extract video ID helper
-      const extractVideoId = (url: string) => {
-        const match = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
-        return match ? match[1] : null;
-      };
-
-      // Verify with grounding chunks if available to ensure URLs are real
-      const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-      if (chunks && chunks.length > 0) {
-        const validUrls = chunks.map(c => c.web?.uri).filter(Boolean) as string[];
-        const validIds = new Set(validUrls.map(extractVideoId).filter(Boolean));
-        
-        if (validIds.size > 0) {
-          // Filter JSON results to only include those with valid IDs from search
-          results = results.filter((r: any) => {
-            const id = extractVideoId(r.url);
-            return id && validIds.has(id);
-          });
-          
-          // If JSON results were all filtered out (hallucinated), fallback to building from chunks
-          if (results.length === 0) {
-            const extractedFromChunks = chunks
-              .filter(c => c.web?.uri && extractVideoId(c.web.uri))
-              .map(c => {
-                const videoId = extractVideoId(c.web!.uri!);
-                return {
-                  title: c.web!.title || 'Video YouTube',
-                  url: `https://www.youtube.com/watch?v=${videoId}`,
-                  thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
-                };
-              });
-              
-            // Remove duplicates
-            const seen = new Set();
-            results = extractedFromChunks.filter(r => {
-              if (seen.has(r.url)) return false;
-              seen.add(r.url);
-              return true;
-            });
-          }
-        }
-      } else {
-        // If no grounding chunks, at least ensure the URLs look like valid YouTube URLs
-        results = results.filter((r: any) => extractVideoId(r.url));
-      }
-
-      setSearchResults(results);
-      if (results.length === 0) {
-        toast.info('Tidak ada hasil video valid yang ditemukan');
-      }
-    } catch (error) {
-      console.error('YouTube Search Error:', error);
-      toast.error('Gagal mencari video YouTube');
-    } finally {
-      setIsSearching(false);
-    }
-  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -590,7 +498,7 @@ export default function ModulForm() {
                   </div>
                 )}
               </div>
-              {prasyaratId && <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-1 italic flex items-center"><Search className="w-3 h-3 mr-1" /> Mata pelajaran dikunci sesuai modul prasyarat</p>}
+              {prasyaratId && <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-1 italic flex items-center"><BookOpen className="w-3 h-3 mr-1" /> Mata pelajaran dikunci sesuai modul prasyarat</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Deskripsi Singkat</label>
@@ -846,83 +754,26 @@ export default function ModulForm() {
                     </div>
   
                     <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                      <label className="block text-xs font-medium text-gray-500 mb-2 uppercase">Cari Video di YouTube</label>
-                      <div className="flex gap-2">
-                        <div className="relative flex-1">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                          <input
-                            type="text"
-                            placeholder="Ketik judul video..."
-                            className="w-full pl-10 pr-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 outline-none focus:ring-2 focus:ring-blue-500"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                searchYouTube(e.currentTarget.value);
-                              }
-                            }}
-                          />
+                      <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                            <Youtube className="w-6 h-6 text-red-600 dark:text-red-400" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">Cari Video Manual</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Buka YouTube untuk mencari video yang sesuai</p>
+                          </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            const input = e.currentTarget.parentElement?.querySelector('input');
-                            if (input) searchYouTube(input.value);
-                          }}
-                          disabled={isSearching}
-                          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 flex items-center gap-2 transition-colors"
+                        <a
+                          href="https://www.youtube.com"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                         >
-                          <Youtube className="w-4 h-4" />
-                          {isSearching ? 'Mencari...' : 'Cari'}
-                        </button>
+                          <ExternalLink className="w-4 h-4 mr-2" />
+                          Buka YouTube
+                        </a>
                       </div>
-  
-                      {searchResults.length > 0 && (
-                        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-72 overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600">
-                          {searchResults.map((result, rIndex) => (
-                            <div 
-                              key={rIndex}
-                              className="flex gap-3 p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm transition-all"
-                            >
-                              <div className="relative w-24 h-14 flex-shrink-0">
-                                {result.thumbnail ? (
-                                  <img src={result.thumbnail} alt="" className="w-full h-full object-cover rounded" referrerPolicy="no-referrer" />
-                                ) : (
-                                  <div className="w-full h-full bg-gray-100 dark:bg-gray-800 rounded flex items-center justify-center">
-                                    <Youtube className="w-6 h-6 text-gray-400" />
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex-1 min-w-0 flex flex-col justify-between">
-                                <div>
-                                  <p className="text-xs font-bold text-gray-900 dark:text-white line-clamp-2 leading-tight mb-1">{result.title}</p>
-                                  <p className="text-[10px] text-gray-500 truncate">{result.url}</p>
-                                </div>
-                                <div className="flex gap-2 mt-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      handleItemChange(index, 'konten', result.url);
-                                      setSearchResults([]);
-                                    }}
-                                    className="flex-1 py-1 px-2 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold rounded transition-colors"
-                                  >
-                                    Pilih
-                                  </button>
-                                  <a
-                                    href={result.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center justify-center py-1 px-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-[10px] font-bold rounded transition-colors"
-                                  >
-                                    <ExternalLink className="w-3 h-3 mr-1" />
-                                    Tonton
-                                  </a>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}
