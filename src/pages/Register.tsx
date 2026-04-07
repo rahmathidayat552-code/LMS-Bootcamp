@@ -148,8 +148,22 @@ export default function Register() {
           </p>
         </div>
 
-        <form className="mt-8 space-y-6" onSubmit={step === 1 ? handleVerify : handleRegister}>
-          <div className="space-y-4">
+        {!settings.enableEmailLogin ? (
+          <div className="text-center space-y-4">
+            <div className="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-400 px-4 py-3 rounded-md text-sm">
+              Registrasi menggunakan email dan password saat ini dinonaktifkan oleh administrator.
+            </div>
+            <Link
+              to="/login"
+              className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
+            >
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              Kembali ke Login
+            </Link>
+          </div>
+        ) : (
+          <form className="mt-8 space-y-6" onSubmit={step === 1 ? handleVerify : handleRegister}>
+            <div className="space-y-4">
             
             {step === 1 && (
               <>
@@ -324,6 +338,7 @@ export default function Register() {
             </button>
           </div>
         </form>
+        )}
         
         <div className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
           <p>

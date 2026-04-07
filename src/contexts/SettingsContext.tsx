@@ -4,6 +4,7 @@ import { db } from '../firebase';
 
 interface AppSettings {
   logoUrl: string | null;
+  enableEmailLogin: boolean;
 }
 
 interface SettingsContextType {
@@ -12,14 +13,14 @@ interface SettingsContextType {
 }
 
 const SettingsContext = createContext<SettingsContextType>({
-  settings: { logoUrl: null },
+  settings: { logoUrl: null, enableEmailLogin: true },
   loading: true,
 });
 
 export const useSettings = () => useContext(SettingsContext);
 
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [settings, setSettings] = useState<AppSettings>({ logoUrl: null });
+  const [settings, setSettings] = useState<AppSettings>({ logoUrl: null, enableEmailLogin: true });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -29,9 +30,10 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const data = docSnap.data();
         setSettings({
           logoUrl: data.logoUrl || null,
+          enableEmailLogin: data.enableEmailLogin !== false, // default to true if undefined
         });
       } else {
-        setSettings({ logoUrl: null });
+        setSettings({ logoUrl: null, enableEmailLogin: true });
       }
       setLoading(false);
     }, (error) => {
