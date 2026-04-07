@@ -1,17 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { updatePassword } from 'firebase/auth';
-import { auth } from '../firebase';
+import { doc, setDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth, db, storage } from '../firebase';
 import { toast } from 'sonner';
-import { KeyRound, Monitor, Moon, Sun, Palette } from 'lucide-react';
+import { KeyRound, Monitor, Moon, Sun, Palette, Image as ImageIcon, Upload, Loader2, X } from 'lucide-react';
 
 export default function Settings() {
   const { user, profile } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { settings } = useSettings();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Check if user logged in with email/password
   const isEmailAuth = user?.providerData.some(provider => provider.providerId === 'password');
@@ -51,6 +57,63 @@ export default function Settings() {
     }
   };
 
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Harap unggah file gambar yang valid');
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Ukuran gambar maksimal 2MB');
+      return;
+    }
+
+    try {
+      setUploadingLogo(true);
+      const storageRef = ref(storage, `settings/app_logo_${Date.now()}`);
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
+
+      await setDoc(doc(db, 'settings', 'app_config'), {
+        logoUrl: downloadURL
+      }, { merge: true });
+
+      toast.success('Logo aplikasi berhasil diperbarui');
+    } catch (error: any) {
+      console.error('Error uploading logo:', error);
+      toast.error('Gagal mengunggah logo: ' + error.message);
+    } finally {
+      setUploadingLogo(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    if (!window.confirm('Apakah Anda yakin ingin menghapus logo kustom dan kembali ke logo default?')) {
+      return;
+    }
+
+    try {
+      setUploadingLogo(true);
+      await setDoc(doc(db, 'settings', 'app_config'), {
+        logoUrl: null
+      }, { merge: true });
+      toast.success('Logo berhasil dihapus');
+    } catch (error: any) {
+      console.error('Error removing logo:', error);
+      toast.error('Gagal menghapus logo: ' + error.message);
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
@@ -59,6 +122,80 @@ export default function Settings() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* App Settings (Admin Only) */}
+        {profile?.role === 'ADMIN' && (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden md:col-span-2">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center space-x-3">
+              <ImageIcon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Pengaturan Aplikasi</h2>
+            </div>
+            <div className="p-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+                <div className="flex-shrink-0">
+                  <div className="w-24 h-24 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center bg-gray-50 dark:bg-gray-900/50 overflow-hidden relative group">
+                    {settings.logoUrl ? (
+                      <img src={settings.logoUrl} alt="App Logo" className="w-full h-full object-contain p-2" />
+                    ) : (
+                      <ImageIcon className="w-8 h-8 text-gray-400" />
+                    )}
+                    
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadingLogo}
+                        className="p-2 bg-white rounded-full text-gray-900 hover:bg-gray-100 transition-colors"
+                        title="Ubah Logo"
+                      >
+                        <Upload className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex-1">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-1">Logo Aplikasi</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                    Unggah logo kustom untuk ditampilkan di halaman login dan sidebar. Format yang didukung: PNG, JPG, SVG (Maks. 2MB).
+                  </p>
+                  
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleLogoUpload}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingLogo}
+                      className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {uploadingLogo ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Upload className="w-4 h-4 mr-2" />
+                      )}
+                      {uploadingLogo ? 'Mengunggah...' : 'Unggah Logo'}
+                    </button>
+                    
+                    {settings.logoUrl && (
+                      <button
+                        onClick={handleRemoveLogo}
+                        disabled={uploadingLogo}
+                        className="flex items-center px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        Hapus
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Theme Settings */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
           <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center space-x-3">

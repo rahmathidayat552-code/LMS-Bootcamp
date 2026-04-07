@@ -263,5 +263,10 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isValidActivityLog(request.resource.data) && request.resource.data.user_id == request.auth.uid;
       allow update, delete: if false; // Activity logs are append-only
     }
+
+    match /settings/{settingId} {
+      allow read: if true; // Anyone can read settings (e.g. logo)
+      allow write: if isAdmin(); // Only admin can update settings
+    }
   }
 }

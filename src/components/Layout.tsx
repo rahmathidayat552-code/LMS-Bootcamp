@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { BookOpen, Users, Settings, LogOut, Menu, X, Moon, Sun, Monitor, LayoutDashboard, FileCheck, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
@@ -9,6 +10,7 @@ import { toast } from 'sonner';
 export default function Layout() {
   const { profile, logout, refreshProfile } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { settings } = useSettings();
   const navigate = useNavigate();
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
@@ -79,7 +81,11 @@ export default function Layout() {
       `}>
         <div className="flex items-center justify-between p-4 md:p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-2">
-            <BookOpen className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+            {settings.logoUrl ? (
+              <img src={settings.logoUrl} alt="LMS Logo" className="w-8 h-8 object-contain" />
+            ) : (
+              <BookOpen className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+            )}
             <span className="font-bold text-xl">LMS SMKN 9</span>
           </div>
           <button onClick={() => setIsSidebarOpen(false)} className="md:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">

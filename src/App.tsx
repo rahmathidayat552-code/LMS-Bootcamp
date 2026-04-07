@@ -22,6 +22,8 @@ import { Toaster } from 'sonner';
 
 import ForgotPassword from './pages/ForgotPassword';
 
+import { SettingsProvider } from './contexts/SettingsContext';
+
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
   const { user, profile, loading } = useAuth();
   const location = useLocation();
@@ -45,9 +47,10 @@ export default function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider>
-        <AuthProvider>
-          <Toaster position="top-right" richColors />
-          <Router>
+        <SettingsProvider>
+          <AuthProvider>
+            <Toaster position="top-right" richColors />
+            <Router>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
@@ -131,6 +134,7 @@ export default function App() {
           </Routes>
         </Router>
         </AuthProvider>
+        </SettingsProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

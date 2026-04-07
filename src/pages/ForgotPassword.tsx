@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../firebase';
+import { useSettings } from '../contexts/SettingsContext';
 import { toast } from 'sonner';
 import { BookOpen, ArrowLeft, Mail, Loader2 } from 'lucide-react';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
+  const { settings } = useSettings();
   const [loading, setLoading] = useState(false);
   const [isSent, setIsSent] = useState(false);
 
@@ -48,8 +50,12 @@ export default function ForgotPassword() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8 transition-colors duration-200">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg transform -rotate-6">
-            <BookOpen className="w-10 h-10 text-white transform rotate-6" />
+          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg transform -rotate-6 overflow-hidden">
+            {settings.logoUrl ? (
+              <img src={settings.logoUrl} alt="LMS Logo" className="w-full h-full object-contain p-2 transform rotate-6 bg-white" />
+            ) : (
+              <BookOpen className="w-10 h-10 text-white transform rotate-6" />
+            )}
           </div>
         </div>
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">

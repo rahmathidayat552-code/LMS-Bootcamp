@@ -3,11 +3,13 @@ import { useNavigate, Link } from 'react-router-dom';
 import { db, auth } from '../firebase';
 import { doc, setDoc, updateDoc, getDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { useSettings } from '../contexts/SettingsContext';
 import { BookOpen, UserPlus, Mail, Lock, Calendar, Hash, User, ArrowRight, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Register() {
   const navigate = useNavigate();
+  const { settings } = useSettings();
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(1);
   const [masterData, setMasterData] = useState<any>(null);
@@ -131,8 +133,12 @@ export default function Register() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8 bg-white dark:bg-gray-800 p-10 rounded-xl shadow-2xl">
         <div>
-          <div className="mx-auto h-16 w-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
-            <BookOpen className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+          <div className="mx-auto h-16 w-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center overflow-hidden">
+            {settings.logoUrl ? (
+              <img src={settings.logoUrl} alt="LMS Logo" className="h-full w-full object-contain p-2" />
+            ) : (
+              <BookOpen className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+            )}
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
             Registrasi Akun
