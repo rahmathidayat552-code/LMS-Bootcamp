@@ -35,6 +35,7 @@ export default function ModulSiswaDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const isPreview = profile?.role === 'GURU' || profile?.role === 'ADMIN';
   
   const [modul, setModul] = useState<any>(null);
   const [items, setItems] = useState<ModulItem[]>([]);
@@ -190,17 +191,19 @@ export default function ModulSiswaDetail() {
         setItems(fetchedItems);
 
         // Fetch Progress
-        const progressRef = collection(db, 'progres_siswa');
-        const qProgress = query(progressRef, where('modul_id', '==', id), where('siswa_id', '==', profile.uid));
-        const snapshotProgress = await getDocs(qProgress);
-        const fetchedProgress: Record<string, any> = {};
-        snapshotProgress.docs.forEach(doc => {
-          fetchedProgress[doc.data().modul_item_id] = doc.data();
-        });
-        setProgress(fetchedProgress);
+        if (!isPreview) {
+          const progressRef = collection(db, 'progres_siswa');
+          const qProgress = query(progressRef, where('modul_id', '==', id), where('siswa_id', '==', profile.uid));
+          const snapshotProgress = await getDocs(qProgress);
+          const fetchedProgress: Record<string, any> = {};
+          snapshotProgress.docs.forEach(doc => {
+            fetchedProgress[doc.data().modul_item_id] = doc.data();
+          });
+          setProgress(fetchedProgress);
+        }
 
         // Check Prerequisite
-        if (currentModulData?.prasyarat_id) {
+        if (!isPreview && currentModulData?.prasyarat_id) {
           const preDoc = await getDoc(doc(db, 'moduls', currentModulData.prasyarat_id));
           if (preDoc.exists()) {
             const preData = { id: preDoc.id, ...preDoc.data() };
@@ -283,7 +286,7 @@ export default function ModulSiswaDetail() {
       }
 
       // Log activity when opening an item
-      if (profile) {
+      if (profile && !isPreview) {
         logActivity(
           profile.uid,
           profile.nama_lengkap,
@@ -325,6 +328,7 @@ export default function ModulSiswaDetail() {
   };
 
   const markAsCompleted = async () => {
+    if (isPreview) return;
     if (!profile || !id || !items[currentIndex] || modul?.is_archived) return;
     
     try {
@@ -363,6 +367,7 @@ export default function ModulSiswaDetail() {
   };
 
   const saveFeedbackOnly = async () => {
+    if (isPreview) return;
     if (!profile || !id || !items[currentIndex] || modul?.is_archived) return;
     try {
       const progressData: any = {};
@@ -385,6 +390,15 @@ export default function ModulSiswaDetail() {
   };
 
   const handleNext = async () => {
+    if (isPreview) {
+      if (currentIndex < items.length - 1) {
+        setCurrentIndex(currentIndex + 1);
+      } else {
+        toast.info('Pratinjau Selesai: Ini adalah akhir dari modul.');
+      }
+      return;
+    }
+
     if (!modul?.is_archived) {
       if (!isFeedbackValid()) {
         toast.error('Silakan isi feedback dan pertanyaan yang wajib sebelum melanjutkan.');
@@ -423,6 +437,18 @@ export default function ModulSiswaDetail() {
   };
 
   const submitKuis = async (questions: KuisSoal[]) => {
+    if (isPreview) {
+      let score = 0;
+      questions.forEach((q, index) => {
+        if (kuisAnswers[index] === q.kunci_jawaban) {
+          score += q.bobot_nilai || 0;
+        }
+      });
+      setKuisScore(score);
+      setKuisSubmitted(true);
+      toast.success(`[PREVIEW] Kuis selesai! Nilai simulasi: ${score}`);
+      return;
+    }
     if (modul?.is_archived) return;
     if (!isFeedbackValid()) {
       toast.error('Silakan isi feedback dan pertanyaan yang wajib sebelum mengumpulkan kuis.');
@@ -479,6 +505,11 @@ export default function ModulSiswaDetail() {
   };
 
   const submitTugas = async () => {
+    if (isPreview) {
+      toast.success('[PREVIEW] Tugas berhasil disimulasikan');
+      handleNext();
+      return;
+    }
     if (modul?.is_archived) return;
     if (!isFeedbackValid()) {
       toast.error('Silakan isi feedback dan pertanyaan yang wajib sebelum mengumpulkan tugas.');
@@ -944,6 +975,25 @@ export default function ModulSiswaDetail() {
 
   return (
     <div className="max-w-6xl mx-auto pb-20">
+      {isPreview && (
+        <div className="mb-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <PlayCircle className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <div>
+              <h3 className="text-sm font-bold text-blue-800 dark:text-blue-300">Mode Pratinjau Guru</h3>
+              <p className="text-sm text-blue-700 dark:text-blue-400">
+                Anda sedang melihat modul ini sebagai siswa. Aktivitas Anda tidak akan dicatat.
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={() => navigate(-1)}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Keluar Pratinjau
+          </button>
+        </div>
+      )}
       {modul?.is_archived && (
         <div className="mb-6 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4 flex items-start space-x-3">
           <BookOpen className="w-6 h-6 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
@@ -977,9 +1027,9 @@ export default function ModulSiswaDetail() {
           
           <div className="space-y-1">
             {items.map((item, idx) => {
-              const isCompleted = progress[item.id]?.status_selesai;
+              const isCompleted = isPreview ? false : progress[item.id]?.status_selesai;
               const isActive = currentIndex === idx;
-              const isAccessible = idx === 0 || progress[items[idx - 1].id]?.status_selesai;
+              const isAccessible = isPreview || idx === 0 || progress[items[idx - 1].id]?.status_selesai;
               
               return (
                 <button
@@ -1109,9 +1159,11 @@ export default function ModulSiswaDetail() {
             <button
               onClick={handleNext}
               disabled={
-                !isFeedbackValid() ||
-                ((currentItem.tipe_item === 'KUIS' || currentItem.tipe_item === 'TUGAS') && 
-                !progress[currentItem.id]?.status_selesai)
+                !isPreview && (
+                  !isFeedbackValid() ||
+                  ((currentItem.tipe_item === 'KUIS' || currentItem.tipe_item === 'TUGAS') && 
+                  !progress[currentItem.id]?.status_selesai)
+                )
               }
               className={`flex items-center px-6 py-2 text-sm font-semibold text-white border border-transparent rounded-xl transition-all shadow-lg hover:scale-105 active:scale-95 ${
                 currentIndex === items.length - 1

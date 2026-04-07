@@ -111,7 +111,7 @@ export default function App() {
                 </ProtectedRoute>
               } />
               <Route path="siswa/modul/:id" element={
-                <ProtectedRoute allowedRoles={['SISWA']}>
+                <ProtectedRoute allowedRoles={['SISWA', 'GURU', 'ADMIN']}>
                   <ModulSiswaDetail />
                 </ProtectedRoute>
               } />
