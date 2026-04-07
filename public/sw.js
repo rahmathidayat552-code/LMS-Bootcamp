@@ -39,13 +39,20 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache First strategy for other assets
+  // Network First strategy for other assets to prevent stale cache issues
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request).then((fetchResponse) => {
-        // Optionally cache new assets here
-        return fetchResponse;
-      });
+    fetch(event.request).then((networkResponse) => {
+      // Cache the new response for future offline use
+      if (networkResponse && networkResponse.status === 200 && (networkResponse.type === 'basic' || networkResponse.type === 'cors')) {
+        const responseToCache = networkResponse.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, responseToCache);
+        });
+      }
+      return networkResponse;
+    }).catch(() => {
+      // Fallback to cache if network fails
+      return caches.match(event.request);
     })
   );
 });

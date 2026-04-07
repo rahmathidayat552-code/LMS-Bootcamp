@@ -45,31 +45,31 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8 transition-colors duration-200">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
           <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg transform -rotate-6">
             <BookOpen className="w-10 h-10 text-white transform rotate-6" />
           </div>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
           Reset Password
         </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
+        <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
           Masukkan email Anda untuk menerima tautan reset password
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+        <div className="bg-white dark:bg-gray-800 py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-transparent dark:border-gray-700">
           {isSent ? (
             <div className="text-center">
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
-                <Mail className="h-6 w-6 text-green-600" />
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/30 mb-4">
+                <Mail className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Cek Email Anda</h3>
-              <p className="text-sm text-gray-500 mb-6">
-                Kami telah mengirimkan tautan untuk mereset password ke <span className="font-medium text-gray-900">{email}</span>. 
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Cek Email Anda</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                Kami telah mengirimkan tautan untuk mereset password ke <span className="font-medium text-gray-900 dark:text-white">{email}</span>. 
                 Silakan cek kotak masuk atau folder spam Anda.
               </p>
               <Link
@@ -82,7 +82,7 @@ export default function ForgotPassword() {
           ) : (
             <form className="space-y-6" onSubmit={handleSubmit}>
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Alamat Email
                 </label>
                 <div className="mt-1">
@@ -94,7 +94,7 @@ export default function ForgotPassword() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     placeholder="nama@email.com"
                   />
                 </div>
@@ -118,7 +118,7 @@ export default function ForgotPassword() {
               </div>
               
               <div className="flex items-center justify-center mt-4">
-                <Link to="/login" className="flex items-center text-sm font-medium text-blue-600 hover:text-blue-500">
+                <Link to="/login" className="flex items-center text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300">
                   <ArrowLeft className="w-4 h-4 mr-1" />
                   Kembali ke Login
                 </Link>

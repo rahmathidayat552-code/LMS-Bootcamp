@@ -40,7 +40,8 @@ export default function Users() {
 
   const [filterRole, setFilterRole] = useState('');
   const [filterKelasId, setFilterKelasId] = useState('');
-  const [sortBy, setSortBy] = useState<'nama_lengkap' | 'username'>('nama_lengkap');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [sortBy, setSortBy] = useState<'nama_lengkap' | 'username' | 'role' | 'kelas' | 'status'>('nama_lengkap');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // View state: 'list' | 'form' | 'preview' | 'import'
@@ -361,7 +362,7 @@ export default function Users() {
 
   const exportToPDF = () => {
     const doc = new jsPDF();
-    const tableColumn = ["No", "Nama Lengkap", "NISN/NIP", "Role", "Kelas", "Tgl Lahir"];
+    const tableColumn = ["No", "Nama Lengkap", "NISN/NIP", "Role", "Kelas", "Tgl Lahir", "Status"];
     const tableRows: any[] = [];
 
     filteredUsers.forEach((user, index) => {
@@ -371,7 +372,8 @@ export default function Users() {
         user.username,
         user.role,
         getKelasName(user.kelas_id),
-        user.tanggal_lahir
+        user.tanggal_lahir,
+        user.is_registered ? 'Terdaftar' : 'Belum Terdaftar'
       ];
       tableRows.push(userData);
     });
@@ -383,6 +385,7 @@ export default function Users() {
     
     let filterText = `Filter Role: ${filterRole || "Semua"}`;
     if (filterKelasId) filterText += ` | Kelas: ${getKelasName(filterKelasId)}`;
+    if (filterStatus) filterText += ` | Status: ${filterStatus === 'TERDAFTAR' ? 'Terdaftar' : 'Belum Terdaftar'}`;
     
     doc.text(filterText, 14, 30);
     doc.text(`Total Pengguna: ${filteredUsers.length}`, 14, 35);
@@ -409,8 +412,9 @@ export default function Users() {
       
       const matchesRole = filterRole ? u.role === filterRole : true;
       const matchesKelas = filterKelasId ? u.kelas_id === filterKelasId : true;
+      const matchesStatus = filterStatus === 'TERDAFTAR' ? u.is_registered : filterStatus === 'BELUM_TERDAFTAR' ? !u.is_registered : true;
       
-      return matchesSearch && matchesRole && matchesKelas;
+      return matchesSearch && matchesRole && matchesKelas && matchesStatus;
     })
     .sort((a, b) => {
       let valA = '';
@@ -422,6 +426,15 @@ export default function Users() {
       } else if (sortBy === 'username') {
         valA = a.username.toLowerCase();
         valB = b.username.toLowerCase();
+      } else if (sortBy === 'role') {
+        valA = a.role.toLowerCase();
+        valB = b.role.toLowerCase();
+      } else if (sortBy === 'kelas') {
+        valA = getKelasName(a.kelas_id).toLowerCase();
+        valB = getKelasName(b.kelas_id).toLowerCase();
+      } else if (sortBy === 'status') {
+        valA = a.is_registered ? '1' : '0';
+        valB = b.is_registered ? '1' : '0';
       }
       
       if (sortOrder === 'asc') {
@@ -788,34 +801,34 @@ export default function Users() {
                   ))}
                 </select>
               )}
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => {
-                    if (sortBy === 'nama_lengkap') {
-                      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                    } else {
-                      setSortBy('nama_lengkap');
-                      setSortOrder('asc');
-                    }
-                  }}
-                  className={`px-3 py-2 rounded-lg border transition-colors flex items-center space-x-1 text-sm ${sortBy === 'nama_lengkap' ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-900/20 dark:border-blue-800' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'}`}
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <option value="">Semua Status</option>
+                <option value="TERDAFTAR">Terdaftar</option>
+                <option value="BELUM_TERDAFTAR">Belum Terdaftar</option>
+              </select>
+              
+              <div className="flex items-center space-x-2 border-l pl-2 border-gray-300 dark:border-gray-600">
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                 >
-                  <span>Nama</span>
-                  <ArrowUpDown className="w-3 h-3" />
-                </button>
+                  <option value="nama_lengkap">Urut: Nama</option>
+                  <option value="username">Urut: NISN/NIP</option>
+                  <option value="role">Urut: Role</option>
+                  <option value="kelas">Urut: Kelas</option>
+                  <option value="status">Urut: Status</option>
+                </select>
                 <button
-                  onClick={() => {
-                    if (sortBy === 'username') {
-                      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                    } else {
-                      setSortBy('username');
-                      setSortOrder('asc');
-                    }
-                  }}
-                  className={`px-3 py-2 rounded-lg border transition-colors flex items-center space-x-1 text-sm ${sortBy === 'username' ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-900/20 dark:border-blue-800' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'}`}
+                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  className="p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                  title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
                 >
-                  <span>NISN/NIP</span>
-                  <ArrowUpDown className="w-3 h-3" />
+                  <ArrowUpDown className={`w-4 h-4 transform transition-transform ${sortOrder === 'desc' ? 'rotate-180' : ''}`} />
                 </button>
               </div>
             </div>

@@ -64,14 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log("Is Iframe:", window.self !== window.top);
 
     // Handle redirect result for Google Login
-    console.log("Checking for redirect result...");
-    getRedirectResult(auth).then((result) => {
-      if (result?.user) {
-        console.log("Redirect result success for:", result.user.email);
-      } else {
-        console.log("No redirect result found.");
-      }
-    }).catch((error: any) => {
+    const redirectPromise = getRedirectResult(auth).catch((error: any) => {
       console.error("Error getting redirect result:", error);
       if (error.code !== 'auth/redirect-cancelled-by-user') {
         toast.error('Gagal menyelesaikan login Google: ' + error.message);
@@ -80,18 +73,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
-      console.log("Firebase Auth State Changed. User:", firebaseUser ? firebaseUser.email : "null");
       
       if (firebaseUser) {
         try {
           const userDocRef = doc(db, 'users', firebaseUser.uid);
-          console.log("Fetching profile from Firestore for UID:", firebaseUser.uid);
           
           let userDoc = await getDoc(userDocRef);
           let retries = 0;
           
           while (!userDoc.exists() && retries < 3) {
-            console.log(`Profile not found, retry ${retries + 1}/3...`);
             await new Promise(resolve => setTimeout(resolve, 1500));
             userDoc = await getDoc(userDocRef);
             retries++;
@@ -99,15 +89,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           if (userDoc.exists()) {
             const data = userDoc.data();
-            console.log("Profile successfully loaded:", data);
             setProfile({ uid: firebaseUser.uid, ...data } as UserProfile);
           } else {
-            console.log("No profile found after retries. Checking admin status...");
             const adminEmail = 'rahmathidayat552@guru.smk.belajar.id'.toLowerCase().trim();
             const currentUserEmail = (firebaseUser.email || '').toLowerCase().trim();
             
             if (currentUserEmail === adminEmail) {
-              console.log("Admin email matched! Creating new admin profile...");
               const newProfile = {
                 email: firebaseUser.email || '',
                 nama_lengkap: firebaseUser.displayName || 'Admin',
@@ -116,17 +103,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               };
               try {
                 await setDoc(userDocRef, newProfile);
-                console.log("Admin profile created successfully in Firestore.");
                 setProfile({ uid: firebaseUser.uid, ...newProfile } as UserProfile);
               } catch (setErr: any) {
                 console.error("CRITICAL: Failed to create admin profile in Firestore:", setErr);
                 toast.error("Gagal membuat profil admin: " + setErr.message);
-                await signOut(auth);
+                await signOut(auth).catch(e => console.error("Sign out failed", e));
               }
             } else {
-              console.warn("User is not a registered student/teacher and not the default admin.");
               toast.error('Akun ini belum terdaftar di sistem.');
-              await signOut(auth);
+              await signOut(auth).catch(e => console.error("Sign out failed", e));
             }
           }
         } catch (error: any) {
@@ -134,7 +119,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           toast.error('Gagal memuat data profil: ' + error.message);
         }
       } else {
-        console.log("No user session found.");
+        // Wait for redirect to finish before assuming user is not logged in
+        await redirectPromise;
+        if (auth.currentUser) {
+          // If user is now logged in, onAuthStateChanged will fire again
+          return;
+        }
         setProfile(null);
       }
       setLoading(false);
@@ -149,27 +139,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       prompt: 'select_account'
     });
     
-    // Detect if we are in a standalone PWA or on mobile
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     
-    console.log("Initiating Google Login. PWA/Mobile:", { isStandalone, isMobile });
+    // iOS standalone PWA has severe issues with popups, always use redirect
+    const forceRedirect = isIOS && isStandalone;
 
     try {
-      // Use signInWithRedirect for PWA/Mobile for better stability
-      if (isStandalone || isMobile) {
-        console.log("Using signInWithRedirect");
+      if (forceRedirect) {
+        console.log("iOS Standalone detected, using signInWithRedirect");
         await signInWithRedirect(auth, provider);
       } else {
-        // Use signInWithPopup for desktop browser for better reliability
-        console.log("Using signInWithPopup");
+        console.log("Attempting signInWithPopup");
         const { signInWithPopup } = await import('firebase/auth');
         await signInWithPopup(auth, provider);
       }
     } catch (error: any) {
       console.error("Error signing in with Google:", error);
       if (error.code === 'auth/popup-blocked') {
-        toast.error('Popup login diblokir. Silakan izinkan popup atau gunakan mode PWA.');
+        console.log("Popup blocked, falling back to redirect...");
+        toast.info('Popup diblokir, mengalihkan halaman...');
+        await signInWithRedirect(auth, provider);
       } else {
         throw error;
       }

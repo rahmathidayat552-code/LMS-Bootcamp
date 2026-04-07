@@ -14,9 +14,30 @@
           navigator.serviceWorker.register('/sw.js')
             .then((registration) => {
               console.log('ServiceWorker registration successful with scope: ', registration.scope);
+              
+              registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                if (newWorker) {
+                  newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      console.log('New content is available; please refresh.');
+                      // Optional: Show a toast here if we had access to the UI, 
+                      // but since we are in index.html, we rely on controllerchange to reload.
+                    }
+                  });
+                }
+              });
             }, (err) => {
               console.log('ServiceWorker registration failed: ', err);
             });
+
+          let refreshing = false;
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!refreshing) {
+              refreshing = true;
+              window.location.reload();
+            }
+          });
         });
       }
     </script>

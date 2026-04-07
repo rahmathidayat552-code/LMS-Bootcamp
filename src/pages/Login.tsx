@@ -49,6 +49,7 @@ export default function Login() {
       await loginWithGoogle();
     } catch (err: any) {
       setError(err.message || 'Gagal masuk dengan Google');
+    } finally {
       setLoading(false);
     }
   };
@@ -82,6 +83,7 @@ export default function Login() {
 
     } catch (err: any) {
       setError('Email atau password salah. Pastikan Anda sudah registrasi.');
+    } finally {
       setLoading(false);
     }
   };

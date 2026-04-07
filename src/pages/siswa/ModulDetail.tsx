@@ -31,6 +31,43 @@ interface KuisSoal {
   bobot_nilai: number;
 }
 
+function extractYouTubeId(urlString: string): string | null {
+  try {
+    const url = new URL(urlString);
+
+    // youtu.be/xxxx
+    if (url.hostname.includes("youtu.be")) {
+      return url.pathname.slice(1);
+    }
+
+    // youtube.com/*
+    if (url.hostname.includes("youtube.com")) {
+      // watch?v=xxxx
+      const v = url.searchParams.get("v");
+      if (v) return v;
+
+      // /embed/xxxx
+      if (url.pathname.includes("/embed/")) {
+        return url.pathname.split("/embed/")[1];
+      }
+
+      // /shorts/xxxx
+      if (url.pathname.includes("/shorts/")) {
+        return url.pathname.split("/shorts/")[1];
+      }
+
+      // /live/xxxx
+      if (url.pathname.includes("/live/")) {
+        return url.pathname.split("/live/")[1];
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export default function ModulSiswaDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -706,17 +743,7 @@ export default function ModulSiswaDetail() {
         );
       case 'YOUTUBE':
         // Extract video ID
-        let videoId = '';
-        try {
-          const url = new URL(currentItem.konten);
-          if (url.hostname.includes('youtube.com')) {
-            videoId = url.searchParams.get('v') || '';
-          } else if (url.hostname.includes('youtu.be')) {
-            videoId = url.pathname.slice(1);
-          }
-        } catch (e) {
-          console.error('Invalid YouTube URL');
-        }
+        const videoId = extractYouTubeId(currentItem.konten);
 
         return (
           <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden bg-black">
@@ -730,7 +757,7 @@ export default function ModulSiswaDetail() {
                 className="w-full h-full min-h-[400px]"
               ></iframe>
             ) : (
-              <div className="flex items-center justify-center h-full min-h-[400px] text-gray-500">
+              <div className="flex items-center justify-center h-full min-h-[400px] text-red-500">
                 URL Video Tidak Valid
               </div>
             )}

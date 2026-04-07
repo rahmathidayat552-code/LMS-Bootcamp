@@ -87,25 +87,31 @@ export default function Register() {
       const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
       const firebaseUser = userCredential.user;
 
-      // 2. Create User Profile in 'users' collection
-      const userProfileData = {
-        email: formData.email.toLowerCase(),
-        nama_lengkap: masterData.nama_lengkap,
-        role: masterData.role,
-        username: masterData.username,
-        kelas_id: masterData.kelas_id || '',
-        created_at: new Date().toISOString() // ISO string for DB
-      };
+      try {
+        // 2. Create User Profile in 'users' collection
+        const userProfileData = {
+          email: formData.email.toLowerCase(),
+          nama_lengkap: masterData.nama_lengkap,
+          role: masterData.role,
+          username: masterData.username,
+          kelas_id: masterData.kelas_id || '',
+          created_at: new Date().toISOString() // ISO string for DB
+        };
 
-      await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
+        await setDoc(doc(db, 'users', firebaseUser.uid), userProfileData);
 
-      // 3. Mark master_users as registered
-      await updateDoc(doc(db, 'master_users', formData.username), {
-        is_registered: true
-      });
+        // 3. Mark master_users as registered
+        await updateDoc(doc(db, 'master_users', formData.username), {
+          is_registered: true
+        });
 
-      toast.success('Berhasil registrasi pengguna!');
-      navigate('/login');
+        toast.success('Berhasil registrasi pengguna!');
+        navigate('/login');
+      } catch (firestoreError: any) {
+        // Rollback Firebase Auth user if Firestore fails
+        await firebaseUser.delete().catch(e => console.error("Rollback failed", e));
+        throw firestoreError;
+      }
 
     } catch (error: any) {
       console.error("Registration error:", error);
