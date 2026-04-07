@@ -12,6 +12,7 @@ import ManajemenSiswa from './pages/admin/ManajemenSiswa';
 import ManajemenGuru from './pages/admin/ManajemenGuru';
 import ModulList from './pages/guru/Modul';
 import ModulForm from './pages/guru/ModulForm';
+import ModulMonitoring from './pages/guru/ModulMonitoring';
 import Penilaian from './pages/guru/Penilaian';
 import ModulSiswaList from './pages/siswa/ModulList';
 import ModulSiswaDetail from './pages/siswa/ModulDetail';
@@ -99,6 +100,11 @@ export default function App() {
               <Route path="guru/modul/:id" element={
                 <ProtectedRoute allowedRoles={['GURU']}>
                   <ModulForm />
+                </ProtectedRoute>
+              } />
+              <Route path="guru/modul/:id/monitoring" element={
+                <ProtectedRoute allowedRoles={['GURU']}>
+                  <ModulMonitoring />
                 </ProtectedRoute>
               } />
               <Route path="guru/penilaian" element={

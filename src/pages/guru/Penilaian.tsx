@@ -33,8 +33,11 @@ export default function Penilaian() {
   const [editScore, setEditScore] = useState<number | ''>('');
 
   useEffect(() => {
+    if (!user) return;
+
+    let unsubscribes: (() => void)[] = [];
+
     const fetchData = async () => {
-      if (!user) return;
       try {
         // Fetch Teacher's Moduls
         const modulsRef = collection(db, 'moduls');
@@ -43,7 +46,6 @@ export default function Penilaian() {
         const modulsData = modulsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setModuls(modulsData);
 
-        // Fetch Submissions for these moduls
         const modulIds = modulsData.map(m => m.id);
         if (modulIds.length === 0) {
           setSubmissions([]);
@@ -51,50 +53,75 @@ export default function Penilaian() {
           return;
         }
 
-        const submissionsRef = collection(db, 'progres_siswa');
-        // We fetch all progress for these moduls
-        // Firestore 'in' query supports max 10 items. 
-        // For simplicity, we'll fetch all and filter in memory if many.
-        // But let's try to fetch only those that need grading (TUGAS)
-        const qSubmissions = query(submissionsRef);
-        const snapshot = await getDocs(qSubmissions);
-        
-        const allSubmissions = await Promise.all(snapshot.docs.map(async (d) => {
+        // Pre-fetch all students to avoid N+1 queries
+        const usersSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'SISWA')));
+        const usersMap: Record<string, any> = {};
+        usersSnap.docs.forEach(d => {
+          usersMap[d.id] = d.data();
+        });
+
+        // Pre-fetch all modul items for these moduls
+        const itemsSnap = await getDocs(collection(db, 'modul_items'));
+        const itemsMap: Record<string, any> = {};
+        itemsSnap.docs.forEach(d => {
           const data = d.data();
-          if (!modulIds.includes(data.modul_id)) return null;
+          if (modulIds.includes(data.modul_id)) {
+            itemsMap[d.id] = data;
+          }
+        });
 
-          // Fetch Siswa Name
-          const siswaDoc = await getDoc(doc(db, 'users', data.siswa_id));
-          const siswaData = siswaDoc.data();
+        const submissionsRef = collection(db, 'progres_siswa');
+        
+        // Listen to progress realtime
+        const unsubProgress = onSnapshot(submissionsRef, (snapshot) => {
+          const allSubmissions: Submission[] = [];
+          
+          snapshot.docs.forEach(d => {
+            const data = d.data();
+            if (!modulIds.includes(data.modul_id)) return;
 
-          // Fetch Modul Item Title
-          const itemDoc = await getDoc(doc(db, 'modul_items', data.modul_item_id));
-          const itemData = itemDoc.data();
+            const siswaData = usersMap[data.siswa_id];
+            const itemData = itemsMap[data.modul_item_id];
 
-          // Only include if it's a TUGAS or KUIS (though KUIS is auto-graded)
-          if (itemData?.tipe_item !== 'TUGAS' && itemData?.tipe_item !== 'KUIS') return null;
+            // Only include if it's a TUGAS or KUIS
+            if (itemData?.tipe_item !== 'TUGAS' && itemData?.tipe_item !== 'KUIS') return;
 
-          const currentModul = modulsData.find(m => m.id === data.modul_id);
+            const currentModul = modulsData.find(m => m.id === data.modul_id);
 
-          return {
-            id: d.id,
-            ...data,
-            siswa_nama: siswaData?.nama_lengkap || 'Siswa Tidak Dikenal',
-            modul_judul: (currentModul as any)?.judul_modul || 'Modul Tidak Dikenal',
-            item_judul: itemData?.judul_item || 'Item Tidak Dikenal'
-          } as Submission;
-        }));
+            allSubmissions.push({
+              id: d.id,
+              ...data,
+              siswa_nama: siswaData?.nama_lengkap || 'Siswa Tidak Dikenal',
+              modul_judul: (currentModul as any)?.judul_modul || 'Modul Tidak Dikenal',
+              item_judul: itemData?.judul_item || 'Item Tidak Dikenal'
+            } as Submission);
+          });
 
-        setSubmissions(allSubmissions.filter(s => s !== null) as Submission[]);
+          // Sort by date descending
+          allSubmissions.sort((a, b) => {
+            const dateA = a.selesai_pada ? new Date(a.selesai_pada).getTime() : 0;
+            const dateB = b.selesai_pada ? new Date(b.selesai_pada).getTime() : 0;
+            return dateB - dateA;
+          });
+
+          setSubmissions(allSubmissions);
+          setLoading(false);
+        });
+
+        unsubscribes.push(unsubProgress);
+
       } catch (error) {
         console.error('Error fetching submissions:', error);
         toast.error('Gagal memuat data penilaian');
-      } finally {
         setLoading(false);
       }
     };
 
     fetchData();
+
+    return () => {
+      unsubscribes.forEach(unsub => unsub());
+    };
   }, [user]);
 
   const handleGrade = async (submission: Submission) => {

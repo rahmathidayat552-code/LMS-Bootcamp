@@ -3,7 +3,7 @@ import { collection, query, where, getDocs, deleteDoc, doc, orderBy, writeBatch,
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen, Plus, Edit, Trash2, Eye, Users, Copy, X, Loader2, CheckCircle, FileText } from 'lucide-react';
+import { BookOpen, Plus, Edit, Trash2, Eye, Users, Copy, X, Loader2, CheckCircle, FileText, Activity } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatDate } from '../../utils/dateUtils';
@@ -324,6 +324,13 @@ export default function ModulList() {
                   title="Tambah Modul Lanjutan"
                 >
                   <Plus className="w-5 h-5" />
+                </Link>
+                <Link
+                  to={`/guru/modul/${modul.id}/monitoring`}
+                  className="p-2 text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-900/20 rounded-lg transition-colors"
+                  title="Monitoring Progres Siswa"
+                >
+                  <Activity className="w-5 h-5" />
                 </Link>
                 <Link
                   to={`/siswa/modul/${modul.id}`}

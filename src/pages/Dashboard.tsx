@@ -93,27 +93,31 @@ export default function Dashboard() {
   useEffect(() => {
     if (!profile) return;
 
-    const fetchStats = async () => {
+    let unsubscribes: (() => void)[] = [];
+
+    const setupRealtimeStats = () => {
       setLoadingStats(true);
-      try {
-        if (profile.role === 'ADMIN') {
-          const usersSnap = await getDocs(collection(db, 'users'));
+
+      if (profile.role === 'ADMIN') {
+        let usersData: any[] = [];
+        let modulsData: any[] = [];
+        let progresData: any[] = [];
+
+        const calculateAdminStats = () => {
           let siswaCount = 0;
           let guruCount = 0;
-          usersSnap.forEach(doc => {
-            if (doc.data().role === 'SISWA') siswaCount++;
-            if (doc.data().role === 'GURU') guruCount++;
+          usersData.forEach(user => {
+            if (user.role === 'SISWA') siswaCount++;
+            if (user.role === 'GURU') guruCount++;
           });
 
-          const modulsSnap = await getDocs(collection(db, 'moduls'));
-          const totalModul = modulsSnap.size;
+          const totalModul = modulsData.length;
 
-          const progresSnap = await getDocs(collection(db, 'progres_siswa'));
           let totalProgres = 0;
           let selesaiProgres = 0;
-          progresSnap.forEach(doc => {
+          progresData.forEach(prog => {
             totalProgres++;
-            if (doc.data().status_selesai) selesaiProgres++;
+            if (prog.status_selesai) selesaiProgres++;
           });
           const persentaseSelesai = totalProgres > 0 ? Math.round((selesaiProgres / totalProgres) * 100) : 0;
 
@@ -123,51 +127,59 @@ export default function Dashboard() {
             totalModul,
             persentaseSelesai
           });
+          setLoadingStats(false);
+        };
 
-          // Fetch recent activities for all
-          const q = query(collection(db, 'activity_logs'), orderBy('created_at', 'desc'), limit(20));
-          const unsubscribe = onSnapshot(q, (snapshot) => {
-            setActivities(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-          });
-          return () => unsubscribe();
+        unsubscribes.push(onSnapshot(collection(db, 'users'), (snap) => {
+          usersData = snap.docs.map(doc => doc.data());
+          calculateAdminStats();
+        }));
+        unsubscribes.push(onSnapshot(collection(db, 'moduls'), (snap) => {
+          modulsData = snap.docs.map(doc => doc.data());
+          calculateAdminStats();
+        }));
+        unsubscribes.push(onSnapshot(collection(db, 'progres_siswa'), (snap) => {
+          progresData = snap.docs.map(doc => doc.data());
+          calculateAdminStats();
+        }));
 
-        } else if (profile.role === 'GURU') {
-          const modulsQ = query(collection(db, 'moduls'), where('guru_id', '==', profile.uid));
-          const modulsSnap = await getDocs(modulsQ);
-          const moduls = modulsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          const totalModulDibuat = moduls.length;
+        const q = query(collection(db, 'activity_logs'), orderBy('created_at', 'desc'), limit(20));
+        unsubscribes.push(onSnapshot(q, (snapshot) => {
+          setActivities(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }));
 
-          const modulIds = moduls.map(m => m.id);
+      } else if (profile.role === 'GURU') {
+        let modulsData: any[] = [];
+        let itemsData: any[] = [];
+        let progresData: any[] = [];
+
+        const calculateGuruStats = () => {
+          const totalModulDibuat = modulsData.length;
+          const modulIds = modulsData.map(m => m.id);
           let totalModulSelesai = 0;
           const uniqueSiswa = new Set<string>();
           const progressRateData: any[] = [];
 
           if (modulIds.length > 0) {
-            // We need to fetch items per modul to know total items
-            const itemsSnap = await getDocs(collection(db, 'modul_items'));
             const itemsPerModul: Record<string, number> = {};
-            itemsSnap.forEach(doc => {
-              const data = doc.data();
-              if (modulIds.includes(data.modul_id)) {
-                itemsPerModul[data.modul_id] = (itemsPerModul[data.modul_id] || 0) + 1;
+            itemsData.forEach(item => {
+              if (modulIds.includes(item.modul_id)) {
+                itemsPerModul[item.modul_id] = (itemsPerModul[item.modul_id] || 0) + 1;
               }
             });
 
-            const progresSnap = await getDocs(collection(db, 'progres_siswa'));
             const progresByModulSiswa: Record<string, Record<string, number>> = {};
-            
-            progresSnap.forEach(doc => {
-              const data = doc.data();
-              if (modulIds.includes(data.modul_id)) {
-                uniqueSiswa.add(data.siswa_id);
-                if (data.status_selesai) {
-                  if (!progresByModulSiswa[data.modul_id]) progresByModulSiswa[data.modul_id] = {};
-                  progresByModulSiswa[data.modul_id][data.siswa_id] = (progresByModulSiswa[data.modul_id][data.siswa_id] || 0) + 1;
+            progresData.forEach(prog => {
+              if (modulIds.includes(prog.modul_id)) {
+                uniqueSiswa.add(prog.siswa_id);
+                if (prog.status_selesai) {
+                  if (!progresByModulSiswa[prog.modul_id]) progresByModulSiswa[prog.modul_id] = {};
+                  progresByModulSiswa[prog.modul_id][prog.siswa_id] = (progresByModulSiswa[prog.modul_id][prog.siswa_id] || 0) + 1;
                 }
               }
             });
 
-            moduls.forEach(modul => {
+            modulsData.forEach(modul => {
               const totalItems = itemsPerModul[modul.id] || 0;
               const siswaProgress = progresByModulSiswa[modul.id] || {};
               let completedStudents = 0;
@@ -186,7 +198,7 @@ export default function Dashboard() {
 
               const avgProgress = studentsStarted > 0 ? Math.round(totalProgressPercentage / studentsStarted) : 0;
               progressRateData.push({
-                name: (modul as any).judul_modul.substring(0, 15) + '...',
+                name: modul.judul_modul.substring(0, 15) + '...',
                 progress: avgProgress
               });
             });
@@ -198,24 +210,41 @@ export default function Dashboard() {
             totalSiswaMengikuti: uniqueSiswa.size,
             progressRateData
           });
+          setLoadingStats(false);
+        };
 
-          // Fetch recent activities for guru's modules
-          const q = query(collection(db, 'activity_logs'), orderBy('created_at', 'desc'), limit(15));
-          const unsubscribe = onSnapshot(q, (snapshot) => {
-            const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            // Filter logs related to guru's modules
-            const guruLogs = logs.filter(log => modulIds.includes((log as any).modul_id));
-            setActivities(guruLogs);
-          });
-          return () => unsubscribe();
+        const modulsQ = query(collection(db, 'moduls'), where('guru_id', '==', profile.uid));
+        unsubscribes.push(onSnapshot(modulsQ, (snap) => {
+          modulsData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          calculateGuruStats();
+        }));
+        unsubscribes.push(onSnapshot(collection(db, 'modul_items'), (snap) => {
+          itemsData = snap.docs.map(doc => doc.data());
+          calculateGuruStats();
+        }));
+        unsubscribes.push(onSnapshot(collection(db, 'progres_siswa'), (snap) => {
+          progresData = snap.docs.map(doc => doc.data());
+          calculateGuruStats();
+        }));
 
-        } else if (profile.role === 'SISWA') {
-          const modulsSnap = await getDocs(collection(db, 'moduls'));
+        const q = query(collection(db, 'activity_logs'), orderBy('created_at', 'desc'), limit(15));
+        unsubscribes.push(onSnapshot(q, (snapshot) => {
+          const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          const modulIds = modulsData.map(m => m.id);
+          const guruLogs = logs.filter(log => modulIds.includes((log as any).modul_id));
+          setActivities(guruLogs);
+        }));
+
+      } else if (profile.role === 'SISWA') {
+        let modulsData: any[] = [];
+        let itemsData: any[] = [];
+        let progresData: any[] = [];
+
+        const calculateSiswaStats = () => {
           let targetedModuls = 0;
           const modulIds: string[] = [];
           
-          modulsSnap.forEach(doc => {
-            const data = doc.data();
+          modulsData.forEach(data => {
             const isPublished = data.is_published === true || String(data.is_published) === 'true';
             if (!isPublished) return;
 
@@ -233,33 +262,29 @@ export default function Dashboard() {
 
             if (isMatch) {
               targetedModuls++;
-              modulIds.push(doc.id);
+              modulIds.push(data.id);
             }
           });
 
           let modulTerselesaikan = 0;
           if (modulIds.length > 0) {
-            const itemsSnap = await getDocs(collection(db, 'modul_items'));
             const itemsPerModul: Record<string, number> = {};
-            itemsSnap.forEach(doc => {
-              const data = doc.data();
+            itemsData.forEach(data => {
               if (modulIds.includes(data.modul_id)) {
                 itemsPerModul[data.modul_id] = (itemsPerModul[data.modul_id] || 0) + 1;
               }
             });
 
-            const progresSnap = await getDocs(query(collection(db, 'progres_siswa'), where('siswa_id', '==', profile.uid)));
-            const completedItemsPerModul: Record<string, number> = {};
-            progresSnap.forEach(doc => {
-              const data = doc.data();
-              if (data.status_selesai && modulIds.includes(data.modul_id)) {
-                completedItemsPerModul[data.modul_id] = (completedItemsPerModul[data.modul_id] || 0) + 1;
+            const progresByModul: Record<string, number> = {};
+            progresData.forEach(data => {
+              if (data.siswa_id === profile.uid && modulIds.includes(data.modul_id) && data.status_selesai) {
+                progresByModul[data.modul_id] = (progresByModul[data.modul_id] || 0) + 1;
               }
             });
 
             modulIds.forEach(modulId => {
               const totalItems = itemsPerModul[modulId] || 0;
-              const completedItems = completedItemsPerModul[modulId] || 0;
+              const completedItems = progresByModul[modulId] || 0;
               if (totalItems > 0 && completedItems >= totalItems) {
                 modulTerselesaikan++;
               }
@@ -273,15 +298,35 @@ export default function Dashboard() {
             modulTerselesaikan,
             persentaseSelesai
           });
-        }
-      } catch (error) {
-        console.error("Error fetching stats:", error);
-      } finally {
-        setLoadingStats(false);
+          setLoadingStats(false);
+        };
+
+        unsubscribes.push(onSnapshot(collection(db, 'moduls'), (snap) => {
+          modulsData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          calculateSiswaStats();
+        }));
+        unsubscribes.push(onSnapshot(collection(db, 'modul_items'), (snap) => {
+          itemsData = snap.docs.map(doc => doc.data());
+          calculateSiswaStats();
+        }));
+        const progresQ = query(collection(db, 'progres_siswa'), where('siswa_id', '==', profile.uid));
+        unsubscribes.push(onSnapshot(progresQ, (snap) => {
+          progresData = snap.docs.map(doc => doc.data());
+          calculateSiswaStats();
+        }));
+
+        const q = query(collection(db, 'activity_logs'), where('user_id', '==', profile.uid), orderBy('created_at', 'desc'), limit(10));
+        unsubscribes.push(onSnapshot(q, (snapshot) => {
+          setActivities(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }));
       }
     };
 
-    fetchStats();
+    setupRealtimeStats();
+
+    return () => {
+      unsubscribes.forEach(unsub => unsub());
+    };
   }, [profile]);
 
   if (!profile) return null;

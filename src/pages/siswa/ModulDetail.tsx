@@ -228,15 +228,17 @@ export default function ModulSiswaDetail() {
         setItems(fetchedItems);
 
         // Fetch Progress
+        let unsubProgress: (() => void) | null = null;
         if (!isPreview) {
           const progressRef = collection(db, 'progres_siswa');
           const qProgress = query(progressRef, where('modul_id', '==', id), where('siswa_id', '==', profile.uid));
-          const snapshotProgress = await getDocs(qProgress);
-          const fetchedProgress: Record<string, any> = {};
-          snapshotProgress.docs.forEach(doc => {
-            fetchedProgress[doc.data().modul_item_id] = doc.data();
+          unsubProgress = onSnapshot(qProgress, (snapshotProgress) => {
+            const fetchedProgress: Record<string, any> = {};
+            snapshotProgress.docs.forEach(doc => {
+              fetchedProgress[doc.data().modul_item_id] = doc.data();
+            });
+            setProgress(fetchedProgress);
           });
-          setProgress(fetchedProgress);
         }
 
         // Check Prerequisite
@@ -294,9 +296,17 @@ export default function ModulSiswaDetail() {
       } finally {
         setLoading(false);
       }
+      return unsubProgress;
     };
 
-    fetchModulData();
+    let cleanup: (() => void) | null = null;
+    fetchModulData().then(unsub => {
+      if (unsub) cleanup = unsub;
+    });
+
+    return () => {
+      if (cleanup) cleanup();
+    };
   }, [id, profile, navigate]);
 
   useEffect(() => {

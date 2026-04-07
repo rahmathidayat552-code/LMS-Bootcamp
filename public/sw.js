@@ -42,6 +42,11 @@ self.addEventListener('fetch', (event) => {
   // Network First strategy for other assets to prevent stale cache issues
   event.respondWith(
     fetch(event.request).then((networkResponse) => {
+      // Only cache GET requests
+      if (event.request.method !== 'GET') {
+        return networkResponse;
+      }
+      
       // Cache the new response for future offline use
       if (networkResponse && networkResponse.status === 200 && (networkResponse.type === 'basic' || networkResponse.type === 'cors')) {
         const responseToCache = networkResponse.clone();
