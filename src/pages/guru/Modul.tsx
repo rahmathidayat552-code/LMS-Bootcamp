@@ -3,7 +3,7 @@ import { collection, query, where, getDocs, deleteDoc, doc, orderBy, writeBatch,
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen, Plus, Edit, Trash2, Eye, Users, Copy, X, Loader2, CheckCircle, FileText, Activity, Share2 } from 'lucide-react';
+import { BookOpen, Plus, Edit, Trash2, Eye, Users, Copy, X, Loader2, CheckCircle, FileText, Activity, Share2, MoreVertical } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatDate } from '../../utils/dateUtils';
@@ -13,6 +13,8 @@ interface Modul {
   judul_modul: string;
   mata_pelajaran: string;
   tipe_target: string;
+  target_kelas_ids?: string[];
+  target_siswa_ids?: string[];
   is_published: boolean;
   is_archived?: boolean;
   ikon?: string;
@@ -34,10 +36,29 @@ export default function ModulList() {
   const [deleteProgress, setDeleteProgress] = useState(false);
   const [hasSubsequent, setHasSubsequent] = useState(false);
   const [copySubsequent, setCopySubsequent] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top?: number, bottom?: number, right: number } | null>(null);
+  const [kelasMap, setKelasMap] = useState<Record<string, string>>({});
+  const [siswaMap, setSiswaMap] = useState<Record<string, string>>({});
 
   const fetchModuls = async () => {
     if (!user) return;
     try {
+      // Fetch Kelas and Siswa for target mapping
+      const kelasSnapshot = await getDocs(collection(db, 'kelas'));
+      const kMap: Record<string, string> = {};
+      kelasSnapshot.docs.forEach(doc => {
+        kMap[doc.id] = doc.data().nama_kelas;
+      });
+      setKelasMap(kMap);
+
+      const siswaSnapshot = await getDocs(query(collection(db, 'users'), where('role', '==', 'SISWA')));
+      const sMap: Record<string, string> = {};
+      siswaSnapshot.docs.forEach(doc => {
+        sMap[doc.id] = doc.data().nama_lengkap;
+      });
+      setSiswaMap(sMap);
+
       const q = query(
         collection(db, 'moduls'),
         where('guru_id', '==', user.uid)
@@ -63,6 +84,30 @@ export default function ModulList() {
   useEffect(() => {
     fetchModuls();
   }, [user]);
+
+  const handleMenuClick = (e: React.MouseEvent, modulId: string) => {
+    if (openMenuId === modulId) {
+      setOpenMenuId(null);
+      setMenuPosition(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const menuHeight = 200; // Estimated height of the menu
+      const spaceBelow = window.innerHeight - rect.bottom;
+      
+      if (spaceBelow < menuHeight) {
+        setMenuPosition({
+          bottom: window.innerHeight - rect.top + 8,
+          right: window.innerWidth - rect.right
+        });
+      } else {
+        setMenuPosition({
+          top: rect.bottom + 8,
+          right: window.innerWidth - rect.right
+        });
+      }
+      setOpenMenuId(modulId);
+    }
+  };
 
   const handleDeleteClick = (modul: Modul) => {
     setSelectedModulForDelete(modul);
@@ -252,128 +297,183 @@ export default function ModulList() {
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {moduls.map((modul) => (
-            <div key={modul.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
-              {modul.ikon && (
-                <div className="h-40 w-full overflow-hidden border-b border-gray-200 dark:border-gray-700">
-                  <img src={modul.ikon} alt={modul.judul_modul} className="w-full h-full object-cover" />
-                </div>
-              )}
-              <div className="p-6 flex-1">
-                <div className="flex justify-between items-start mb-4">
-                  <span className={`px-2.5 py-1 text-xs font-medium rounded-full flex items-center space-x-1 ${
-                    modul.is_archived
-                      ? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                      : modul.is_published 
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
-                  }`}>
-                    {modul.is_archived ? (
-                      <>
-                        <BookOpen className="w-3 h-3" />
-                        <span>Diarsipkan</span>
-                      </>
-                    ) : modul.is_published ? (
-                      <>
-                        <CheckCircle className="w-3 h-3" />
-                        <span>Dipublikasikan</span>
-                      </>
-                    ) : (
-                      <>
-                        <FileText className="w-3 h-3" />
-                        <span>Draft</span>
-                      </>
-                    )}
-                  </span>
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
-                    {formatDate(modul.created_at)}
-                  </span>
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 line-clamp-2">
-                  {modul.judul_modul}
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                  {modul.mata_pelajaran}
-                </p>
-                <div className="flex flex-col space-y-2">
-                  <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
-                    <Users className="w-4 h-4 mr-1.5" />
-                    <span>Target: {modul.tipe_target === 'KELAS' ? 'Kelas' : 'Siswa Tertentu'}</span>
-                  </div>
-                  <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
-                    <Eye className="w-4 h-4 mr-1.5" />
-                    <span>Diakses oleh: <span className="font-semibold text-gray-900 dark:text-white">{modul.viewers?.length || 0}</span> Siswa</span>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 dark:bg-gray-800/50 px-6 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
-                <button
-                  onClick={() => toggleArchive(modul)}
-                  className={`p-2 rounded-lg transition-colors ${
-                    modul.is_archived 
-                      ? 'text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20' 
-                      : 'text-gray-600 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700'
-                  }`}
-                  title={modul.is_archived ? "Buka Arsip" : "Arsipkan Modul"}
-                >
-                  <BookOpen className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={() => openCopyModal(modul)}
-                  className="p-2 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
-                  title="Salin Modul"
-                  disabled={copying}
-                >
-                  <Copy className="w-5 h-5" />
-                </button>
-                <Link
-                  to={`/guru/modul/create?prasyarat=${modul.id}`}
-                  className="p-2 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
-                  title="Tambah Modul Lanjutan"
-                >
-                  <Plus className="w-5 h-5" />
-                </Link>
-                <Link
-                  to={`/guru/modul/${modul.id}/monitoring`}
-                  className="p-2 text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-900/20 rounded-lg transition-colors"
-                  title="Monitoring Progres Siswa"
-                >
-                  <Activity className="w-5 h-5" />
-                </Link>
-                <Link
-                  to={`/siswa/modul/${modul.id}`}
-                  className="p-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
-                  title="Pratinjau Modul"
-                >
-                  <Eye className="w-5 h-5" />
-                </Link>
-                {modul.is_published && (
-                  <button
-                    onClick={() => handleShare(modul.id)}
-                    className="p-2 text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/20 rounded-lg transition-colors"
-                    title="Bagikan Link Modul"
-                  >
-                    <Share2 className="w-5 h-5" />
-                  </button>
-                )}
-                <Link
-                  to={`/guru/modul/${modul.id}`}
-                  className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                  title="Edit Modul"
-                >
-                  <Edit className="w-5 h-5" />
-                </Link>
-                <button
-                  onClick={() => handleDeleteClick(modul)}
-                  className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                  title="Hapus Modul"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-          ))}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700">
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Judul Modul</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Mata Pelajaran</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Target</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Diakses Oleh</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {moduls.map((modul) => (
+                  <tr key={modul.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center">
+                        {modul.ikon ? (
+                          <img src={modul.ikon} alt="" className="w-8 h-8 rounded-lg mr-3 object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-lg flex items-center justify-center mr-3">
+                            <BookOpen className="w-4 h-4" />
+                          </div>
+                        )}
+                        <div>
+                          <div className="text-sm font-bold text-gray-900 dark:text-white line-clamp-1">{modul.judul_modul}</div>
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider mt-0.5">
+                            {modul.is_published ? (
+                              <span className="text-green-600 dark:text-green-400 font-semibold">Terbit</span>
+                            ) : (
+                              <span className="text-orange-600 dark:text-orange-400 font-semibold">Draft</span>
+                            )}
+                            {modul.is_archived && <span className="ml-2 text-gray-400">Arsip</span>}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-700 dark:text-gray-300">{modul.mata_pelajaran}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col space-y-1">
+                        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                          <Users className="w-4 h-4 mr-2" />
+                          <span className="font-medium">{modul.tipe_target === 'KELAS' ? 'Kelas' : 'Siswa Tertentu'}</span>
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2" title={
+                          modul.tipe_target === 'KELAS' 
+                            ? modul.target_kelas_ids?.map(id => kelasMap[id] || 'Unknown').join(', ')
+                            : modul.target_siswa_ids?.map(id => siswaMap[id] || 'Unknown').join(', ')
+                        }>
+                          {modul.tipe_target === 'KELAS' 
+                            ? modul.target_kelas_ids?.map(id => kelasMap[id] || 'Unknown').join(', ') || '-'
+                            : modul.target_siswa_ids?.map(id => siswaMap[id] || 'Unknown').join(', ') || '-'}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                        <Eye className="w-4 h-4 mr-2" />
+                        <span>Diakses oleh: <span className="font-bold text-gray-900 dark:text-white">{modul.viewers?.length || 0}</span> Siswa</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end space-x-1 relative">
+                        <Link
+                          to={`/guru/modul/${modul.id}`}
+                          className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                          title="Edit Modul"
+                        >
+                          <Edit className="w-5 h-5" />
+                        </Link>
+                        <Link
+                          to={`/siswa/modul/${modul.id}`}
+                          className="p-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
+                          title="Pratinjau Modul"
+                        >
+                          <Eye className="w-5 h-5" />
+                        </Link>
+                        <button
+                          onClick={() => openCopyModal(modul)}
+                          className="p-2 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
+                          title="Salin Modul"
+                          disabled={copying}
+                        >
+                          <Copy className="w-5 h-5" />
+                        </button>
+                        
+                        <div className="relative ml-1">
+                          <button 
+                            onClick={(e) => handleMenuClick(e, modul.id)}
+                            className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                          >
+                            <MoreVertical className="w-5 h-5" />
+                          </button>
+                          
+                          <AnimatePresence>
+                            {openMenuId === modul.id && menuPosition && (
+                              <>
+                                <div 
+                                  className="fixed inset-0 z-10" 
+                                  onClick={() => {
+                                    setOpenMenuId(null);
+                                    setMenuPosition(null);
+                                  }}
+                                />
+                                <motion.div
+                                  initial={{ opacity: 0, scale: 0.95, y: menuPosition.bottom ? 10 : -10 }}
+                                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                                  exit={{ opacity: 0, scale: 0.95, y: menuPosition.bottom ? 10 : -10 }}
+                                  style={{ 
+                                    top: menuPosition.top, 
+                                    bottom: menuPosition.bottom,
+                                    right: menuPosition.right 
+                                  }}
+                                  className="fixed w-48 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-20 overflow-hidden text-left"
+                                >
+                                  <div className="py-1">
+                                    {modul.is_published && (
+                                      <button
+                                        onClick={() => {
+                                          handleShare(modul.id);
+                                          setOpenMenuId(null);
+                                          setMenuPosition(null);
+                                        }}
+                                        className="w-full flex items-center px-4 py-2.5 text-sm text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-colors"
+                                      >
+                                        <Share2 className="w-4 h-4 mr-3" />
+                                        <span>Bagikan</span>
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => {
+                                        navigate(`/guru/modul/${modul.id}/monitoring`);
+                                        setOpenMenuId(null);
+                                        setMenuPosition(null);
+                                      }}
+                                      className="w-full flex items-center px-4 py-2.5 text-sm text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors"
+                                    >
+                                      <Activity className="w-4 h-4 mr-3" />
+                                      <span>Monitoring</span>
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        toggleArchive(modul);
+                                        setOpenMenuId(null);
+                                        setMenuPosition(null);
+                                      }}
+                                      className="w-full flex items-center px-4 py-2.5 text-sm text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
+                                    >
+                                      <BookOpen className="w-4 h-4 mr-3" />
+                                      <span>{modul.is_archived ? "Buka Arsip" : "Arsipkan"}</span>
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        handleDeleteClick(modul);
+                                        setOpenMenuId(null);
+                                        setMenuPosition(null);
+                                      }}
+                                      className="w-full flex items-center px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                    >
+                                      <Trash2 className="w-4 h-4 mr-3" />
+                                      <span>Hapus</span>
+                                    </button>
+                                  </div>
+                                </motion.div>
+                              </>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

@@ -1219,9 +1219,10 @@ export default function ModulSiswaDetail() {
               </h2>
             </div>
             {currentItem.deskripsi && (
-              <p className="text-gray-600 dark:text-gray-400 mt-2 ml-11">
-                {currentItem.deskripsi}
-              </p>
+              <div 
+                className="text-gray-600 dark:text-gray-400 mt-2 ml-11 prose dark:prose-invert max-w-none"
+                dangerouslySetInnerHTML={{ __html: currentItem.deskripsi }}
+              />
             )}
           </div>
           

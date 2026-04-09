@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, doc, updateDoc, getDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, getDoc, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { CheckCircle, Clock, Search, Filter, ExternalLink, Save, User, BookOpen, Calendar } from 'lucide-react';

@@ -803,13 +803,17 @@ export default function ModulForm() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Instruksi / Penjelasan</label>
-                        <textarea
-                          value={item.deskripsi}
-                          onChange={(e) => handleItemChange(index, 'deskripsi', e.target.value)}
-                          rows={2}
-                          className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                          placeholder="Berikan instruksi apa yang harus dilakukan siswa pada tahap ini..."
-                        />
+                        <div className="bg-white dark:bg-gray-700 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
+                          <ReactQuill
+                            theme="snow"
+                            value={item.deskripsi || ''}
+                            onChange={(content) => handleItemChange(index, 'deskripsi', content)}
+                            modules={quizQuillModules}
+                            formats={quizQuillFormats}
+                            placeholder="Berikan instruksi apa yang harus dilakukan siswa pada tahap ini..."
+                            className="min-h-[100px]"
+                          />
+                        </div>
                       </div>
 
                 {/* Feedback & Pertanyaan Settings */}
