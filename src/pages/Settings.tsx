@@ -67,31 +67,48 @@ export default function Settings() {
       return;
     }
 
-    // Validate file size (max 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('Ukuran gambar maksimal 2MB');
+    // Validate file size (max 1MB for Base64 storage)
+    if (file.size > 1024 * 1024) {
+      toast.error('Ukuran gambar maksimal 1MB');
       return;
     }
 
     try {
       setUploadingLogo(true);
-      const storageRef = ref(storage, `settings/app_logo_${Date.now()}`);
-      await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(storageRef);
+      
+      // Convert to Base64 instead of uploading to Firebase Storage
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
+          const base64String = reader.result as string;
+          
+          await setDoc(doc(db, 'settings', 'app_config'), {
+            logoUrl: base64String
+          }, { merge: true });
 
-      await setDoc(doc(db, 'settings', 'app_config'), {
-        logoUrl: downloadURL
-      }, { merge: true });
-
-      toast.success('Logo aplikasi berhasil diperbarui');
+          toast.success('Logo aplikasi berhasil diperbarui');
+        } catch (error: any) {
+          console.error('Error saving logo to Firestore:', error);
+          toast.error('Gagal menyimpan logo: ' + error.message);
+        } finally {
+          setUploadingLogo(false);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+        }
+      };
+      
+      reader.onerror = () => {
+        toast.error('Gagal membaca file gambar');
+        setUploadingLogo(false);
+      };
+      
+      reader.readAsDataURL(file);
+      
     } catch (error: any) {
-      console.error('Error uploading logo:', error);
-      toast.error('Gagal mengunggah logo: ' + error.message);
-    } finally {
+      console.error('Error processing logo:', error);
+      toast.error('Gagal memproses logo: ' + error.message);
       setUploadingLogo(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
     }
   };
 
@@ -155,7 +172,7 @@ export default function Settings() {
                 <div className="flex-1">
                   <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-1">Logo Aplikasi</h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                    Unggah logo kustom untuk ditampilkan di halaman login dan sidebar. Format yang didukung: PNG, JPG, SVG (Maks. 2MB).
+                    Unggah logo kustom untuk ditampilkan di halaman login dan sidebar. Format yang didukung: PNG, JPG, SVG (Maks. 1MB).
                   </p>
                   
                   <div className="flex items-center space-x-3">

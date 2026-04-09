@@ -42,20 +42,26 @@ self.addEventListener('fetch', (event) => {
   // Network First strategy for other assets to prevent stale cache issues
   event.respondWith(
     fetch(event.request).then((networkResponse) => {
-      // Only cache GET requests
-      if (event.request.method !== 'GET') {
+      // Only cache GET requests and avoid caching Firebase Storage or Firestore requests
+      if (
+        event.request.method !== 'GET' || 
+        event.request.url.includes('firebasestorage.googleapis.com') ||
+        event.request.url.includes('firestore.googleapis.com')
+      ) {
         return networkResponse;
       }
       
       // Cache the new response for future offline use
+      // Only cache valid responses
       if (networkResponse && networkResponse.status === 200 && (networkResponse.type === 'basic' || networkResponse.type === 'cors')) {
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
+          cache.put(event.request, responseToCache).catch(err => console.warn('Cache put error:', err));
         });
       }
       return networkResponse;
-    }).catch(() => {
+    }).catch((error) => {
+      console.warn('Fetch failed, falling back to cache:', error);
       // Fallback to cache if network fails
       return caches.match(event.request);
     })
