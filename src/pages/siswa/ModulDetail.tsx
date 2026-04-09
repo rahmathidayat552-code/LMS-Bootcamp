@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, collection, query, where, getDocs, orderBy, setDoc, serverTimestamp, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, orderBy, setDoc, serverTimestamp, updateDoc, arrayUnion, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase';
+import { supabase } from '../../supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { BookOpen, FileText, Youtube, CheckCircle, ChevronLeft, ChevronRight, PlayCircle, FileUp, ListChecks, Download, Lock, ExternalLink as ExternalLinkIcon } from 'lucide-react';
 import { toast } from 'sonner';
@@ -90,14 +91,17 @@ export default function ModulSiswaDetail() {
   // State for Tugas
   const [tugasLink, setTugasLink] = useState('');
   const [tugasFile, setTugasFile] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   // State for Feedback
   const [feedbackText, setFeedbackText] = useState('');
   const [pertanyaanAnswer, setPertanyaanAnswer] = useState('');
 
   useEffect(() => {
+    let unsubProgress: (() => void) | null = null;
+
     const fetchModulData = async () => {
-      if (!id || !profile) return;
+      if (!id || !profile) return null;
 
       try {
         // Handle Mock Tutorial Modul
@@ -206,6 +210,45 @@ export default function ModulSiswaDetail() {
           return;
         }
         const currentModulData = modulDoc.data();
+
+        // Access Control Check for Siswa
+        if (!isPreview) {
+          // 1. Check if published
+          if (!currentModulData.is_published) {
+            toast.error('Modul ini belum dipublikasikan');
+            navigate('/siswa/modul');
+            return;
+          }
+
+          // 2. Check targeting
+          const studentKelasId = (profile.kelas_id || '').trim();
+          const studentUid = profile.uid;
+          
+          const targetKelasIds = Array.isArray(currentModulData.target_kelas_ids) 
+            ? currentModulData.target_kelas_ids.map((tid: any) => String(tid).trim()) 
+            : [];
+          const targetSiswaIds = Array.isArray(currentModulData.target_siswa_ids) 
+            ? currentModulData.target_siswa_ids.map((tid: any) => String(tid).trim()) 
+            : [];
+
+          let isMatch = false;
+
+          if (currentModulData.tipe_target === 'KELAS') {
+            isMatch = targetKelasIds.includes(studentKelasId);
+          } else if (currentModulData.tipe_target === 'SISWA') {
+            isMatch = targetSiswaIds.includes(studentUid);
+          } else {
+            // Fallback if tipe_target is missing
+            isMatch = targetKelasIds.includes(studentKelasId) || targetSiswaIds.includes(studentUid);
+          }
+
+          if (!isMatch) {
+            toast.error('Anda tidak memiliki akses ke modul ini');
+            navigate('/siswa/modul');
+            return;
+          }
+        }
+
         setModul({ id: modulDoc.id, ...currentModulData });
 
         // Add user to viewers if not already present
@@ -228,7 +271,6 @@ export default function ModulSiswaDetail() {
         setItems(fetchedItems);
 
         // Fetch Progress
-        let unsubProgress: (() => void) | null = null;
         if (!isPreview) {
           const progressRef = collection(db, 'progres_siswa');
           const qProgress = query(progressRef, where('modul_id', '==', id), where('siswa_id', '==', profile.uid));
@@ -611,9 +653,30 @@ export default function ModulSiswaDetail() {
     }
 
     try {
-      // Simulate file upload by creating a fake URL or storing the file name
-      // In a real app, you would upload to Firebase Storage here
-      const fileSubmissionUrl = tugasFile ? `https://storage.example.com/fake-path/${tugasFile.name}` : null;
+      setSubmitting(true);
+      let fileSubmissionUrl = null;
+
+      if (tugasFile) {
+        toast.info('Mengunggah file tugas...');
+        const fileExt = tugasFile.name.split('.').pop();
+        const fileName = `${profile?.uid}_${items[currentIndex].id}_${Date.now()}.${fileExt}`;
+        const filePath = `tugas/${fileName}`;
+
+        const { data, error } = await supabase.storage
+          .from('tugas-siswa')
+          .upload(filePath, tugasFile);
+
+        if (error) {
+          console.error('Supabase upload error:', error);
+          throw new Error(`Gagal mengunggah file: ${error.message}`);
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from('tugas-siswa')
+          .getPublicUrl(filePath);
+
+        fileSubmissionUrl = publicUrlData.publicUrl;
+      }
 
       const progressData: any = {
         siswa_id: profile?.uid,
@@ -651,9 +714,11 @@ export default function ModulSiswaDetail() {
 
       toast.success('Tugas berhasil dikumpulkan');
       handleNext();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving tugas:', error);
-      toast.error('Gagal mengumpulkan tugas');
+      toast.error(error.message || 'Gagal mengumpulkan tugas');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -939,10 +1004,10 @@ export default function ModulSiswaDetail() {
 
               <button
                 onClick={submitTugas}
-                disabled={modul?.is_archived}
+                disabled={modul?.is_archived || submitting}
                 className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Kumpulkan Tugas
+                {submitting ? 'Mengumpulkan...' : 'Kumpulkan Tugas'}
               </button>
             </div>
           </div>

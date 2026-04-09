@@ -3,7 +3,7 @@ import { collection, query, where, getDocs, deleteDoc, doc, orderBy, writeBatch,
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen, Plus, Edit, Trash2, Eye, Users, Copy, X, Loader2, CheckCircle, FileText, Activity } from 'lucide-react';
+import { BookOpen, Plus, Edit, Trash2, Eye, Users, Copy, X, Loader2, CheckCircle, FileText, Activity, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatDate } from '../../utils/dateUtils';
@@ -209,6 +209,15 @@ export default function ModulList() {
     }
   };
 
+  const handleShare = (modulId: string) => {
+    const url = `${window.location.origin}/siswa/modul/${modulId}`;
+    navigator.clipboard.writeText(url).then(() => {
+      toast.success('Link modul berhasil disalin ke clipboard');
+    }).catch(() => {
+      toast.error('Gagal menyalin link');
+    });
+  };
+
   if (loading) {
     return <div className="flex justify-center items-center h-64">Memuat...</div>;
   }
@@ -339,6 +348,15 @@ export default function ModulList() {
                 >
                   <Eye className="w-5 h-5" />
                 </Link>
+                {modul.is_published && (
+                  <button
+                    onClick={() => handleShare(modul.id)}
+                    className="p-2 text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/20 rounded-lg transition-colors"
+                    title="Bagikan Link Modul"
+                  >
+                    <Share2 className="w-5 h-5" />
+                  </button>
+                )}
                 <Link
                   to={`/guru/modul/${modul.id}`}
                   className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"

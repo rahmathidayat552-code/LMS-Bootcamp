@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { db, auth } from '../firebase';
 import { doc, setDoc, updateDoc, getDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
@@ -9,6 +9,8 @@ import { toast } from 'sonner';
 
 export default function Register() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from || '/';
   const { settings } = useSettings();
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(1);
@@ -108,7 +110,7 @@ export default function Register() {
         });
 
         toast.success('Berhasil registrasi pengguna!');
-        navigate('/login');
+        navigate('/login', { state: { from } });
       } catch (firestoreError: any) {
         // Rollback Firebase Auth user if Firestore fails
         await firebaseUser.delete().catch(e => console.error("Rollback failed", e));
@@ -343,7 +345,7 @@ export default function Register() {
         <div className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
           <p>
             Sudah punya akun?{' '}
-            <Link to="/login" className="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300">
+            <Link to="/login" state={{ from }} className="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300">
               Masuk di sini
             </Link>
           </p>

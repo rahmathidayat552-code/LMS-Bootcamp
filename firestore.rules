@@ -257,8 +257,8 @@ service cloud.firestore {
     }
 
     match /activity_logs/{logId} {
-      // Guru and Admin can read all activity logs
-      allow read: if isAuthenticated() && (isAdmin() || isGuru());
+      // Guru and Admin can read all activity logs, Siswa can read their own
+      allow read: if isAuthenticated() && (isAdmin() || isGuru() || resource.data.user_id == request.auth.uid);
       // Siswa can create their own activity logs
       allow create: if isAuthenticated() && isValidActivityLog(request.resource.data) && request.resource.data.user_id == request.auth.uid;
       allow update, delete: if false; // Activity logs are append-only

@@ -8,6 +8,23 @@ import { toast } from 'sonner';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { motion, AnimatePresence } from 'motion/react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface Kelas {
   id: string;
@@ -72,6 +89,50 @@ const quizQuillFormats = [
   'bold', 'italic', 'underline', 'list'
 ];
 
+function SortableStepItem({ item, index, isActive, onClick, onRemove }: { item: ModulItem, index: number, isActive: boolean, onClick: () => void, onRemove: (e: React.MouseEvent) => void }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id: item.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center justify-between p-3 rounded-xl border mb-2 cursor-pointer transition-colors ${isActive ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700 hover:border-blue-300'}`}
+      onClick={onClick}
+    >
+      <div className="flex items-center space-x-3 overflow-hidden">
+        <div {...attributes} {...listeners} className="cursor-grab p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+          <GripVertical className="w-4 h-4 text-gray-400" />
+        </div>
+        <div className="truncate">
+          <p className={`text-sm font-medium truncate ${isActive ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'}`}>
+            Tahap {index + 1}: {item.judul_item || 'Tanpa Judul'}
+          </p>
+          <p className="text-xs text-gray-500 truncate">
+            {item.tipe_item === 'MATERI' ? 'Materi Teks' :
+             item.tipe_item === 'PDF' ? 'Dokumen PDF' :
+             item.tipe_item === 'YOUTUBE' ? 'Video YouTube' :
+             item.tipe_item === 'KUIS' ? 'Kuis/Soal' : 'Tugas Upload'}
+          </p>
+        </div>
+      </div>
+      <button onClick={onRemove} className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20">
+        <Trash2 className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
 export default function ModulForm() {
   const { id } = useParams();
   const isEditing = !!id;
@@ -96,6 +157,15 @@ export default function ModulForm() {
   
   const [items, setItems] = useState<ModulItem[]>([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+
+  const [searchSiswa, setSearchSiswa] = useState('');
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Data State
   const [kelasList, setKelasList] = useState<Kelas[]>([]);
@@ -404,6 +474,35 @@ export default function ModulForm() {
     }
   };
 
+  const filteredSiswaList = siswaList.filter(s => s.nama_lengkap.toLowerCase().includes(searchSiswa.toLowerCase()));
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setItems((items) => {
+        const oldIndex = items.findIndex((item) => item.id === active.id);
+        const newIndex = items.findIndex((item) => item.id === over.id);
+
+        const newItems = arrayMove(items, oldIndex, newIndex);
+        newItems.forEach((item, i) => {
+          item.urutan = i + 1;
+        });
+        
+        // Update currentStepIndex if the active item was moved
+        if (currentStepIndex === oldIndex) {
+          setCurrentStepIndex(newIndex);
+        } else if (currentStepIndex > oldIndex && currentStepIndex <= newIndex) {
+          setCurrentStepIndex(currentStepIndex - 1);
+        } else if (currentStepIndex < oldIndex && currentStepIndex >= newIndex) {
+          setCurrentStepIndex(currentStepIndex + 1);
+        }
+
+        return newItems;
+      });
+    }
+  };
+
   if (fetching) {
     return <div className="flex justify-center items-center h-64">Memuat...</div>;
   }
@@ -560,25 +659,37 @@ export default function ModulForm() {
               {kelasList.length === 0 && <p className="text-sm text-gray-500">Belum ada data kelas.</p>}
             </div>
           ) : (
-            <div className={`border border-gray-200 dark:border-gray-700 rounded-lg p-4 max-h-48 overflow-y-auto bg-gray-50 dark:bg-gray-900/50 transition-opacity ${prasyaratId ? 'opacity-70 ring-1 ring-blue-100 dark:ring-blue-900/30' : ''}`}>
-              {siswaList.map(siswa => (
-                <label key={siswa.id} className={`flex items-center space-x-3 mb-2 last:mb-0 ${prasyaratId ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-                  <input
-                    type="checkbox"
-                    checked={targetSiswaIds.includes(siswa.id)}
-                    onChange={(e) => {
-                      if (e.target.checked) setTargetSiswaIds([...targetSiswaIds, siswa.id]);
-                      else setTargetSiswaIds(targetSiswaIds.filter(id => id !== siswa.id));
-                    }}
-                    disabled={!!prasyaratId}
-                    className="rounded text-blue-600 focus:ring-blue-500 disabled:opacity-50"
-                  />
-                  <span className={`text-sm ${targetSiswaIds.includes(siswa.id) && prasyaratId ? 'text-blue-700 dark:text-blue-300 font-medium' : 'dark:text-gray-300'}`}>
-                    {siswa.nama_lengkap}
-                  </span>
-                </label>
-              ))}
-              {siswaList.length === 0 && <p className="text-sm text-gray-500">Belum ada data siswa.</p>}
+            <div className={`border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-900/50 transition-opacity ${prasyaratId ? 'opacity-70 ring-1 ring-blue-100 dark:ring-blue-900/30' : ''}`}>
+              <div className="mb-3">
+                <input
+                  type="text"
+                  placeholder="Cari nama siswa..."
+                  value={searchSiswa}
+                  onChange={(e) => setSearchSiswa(e.target.value)}
+                  className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  disabled={!!prasyaratId}
+                />
+              </div>
+              <div className="max-h-48 overflow-y-auto">
+                {filteredSiswaList.map(siswa => (
+                  <label key={siswa.id} className={`flex items-center space-x-3 mb-2 last:mb-0 ${prasyaratId ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                    <input
+                      type="checkbox"
+                      checked={targetSiswaIds.includes(siswa.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) setTargetSiswaIds([...targetSiswaIds, siswa.id]);
+                        else setTargetSiswaIds(targetSiswaIds.filter(id => id !== siswa.id));
+                      }}
+                      disabled={!!prasyaratId}
+                      className="rounded text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                    />
+                    <span className={`text-sm ${targetSiswaIds.includes(siswa.id) && prasyaratId ? 'text-blue-700 dark:text-blue-300 font-medium' : 'dark:text-gray-300'}`}>
+                      {siswa.nama_lengkap}
+                    </span>
+                  </label>
+                ))}
+                {filteredSiswaList.length === 0 && <p className="text-sm text-gray-500">Siswa tidak ditemukan.</p>}
+              </div>
             </div>
           )}
           {prasyaratId && (
@@ -590,85 +701,116 @@ export default function ModulForm() {
 
       </div>
 
-      <div className="space-y-4">
-        <div className="flex justify-between items-center">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Tahapan Belajar</h2>
-          <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
-            {items.length > 0 ? `Tahap ${currentStepIndex + 1} dari ${items.length}` : 'Belum ada tahapan'}
-          </div>
-        </div>
-        
-        {items.length > 0 ? (
-          <div className="relative">
-            {currentStepIndex > 0 && (
-              <button 
-                onClick={() => setCurrentStepIndex(currentStepIndex - 1)}
-                className="absolute left-0 top-1/2 -translate-y-1/2 -ml-5 w-10 h-10 bg-white dark:bg-gray-700 rounded-full shadow-lg border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-blue-600 z-10"
+      <div className="flex flex-col md:flex-row gap-6 mt-8">
+        {/* Sidebar */}
+        <div className="w-full md:w-80 shrink-0 space-y-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 border border-gray-200 dark:border-gray-700">
+            <h3 className="font-bold text-gray-900 dark:text-white mb-4">Daftar Tahapan</h3>
+            
+            <DndContext 
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext 
+                items={items.map(i => i.id)}
+                strategy={verticalListSortingStrategy}
               >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-            )}
-            {currentStepIndex < items.length - 1 && (
-              <button 
-                onClick={() => setCurrentStepIndex(currentStepIndex + 1)}
-                className="absolute right-0 top-1/2 -translate-y-1/2 -mr-5 w-10 h-10 bg-white dark:bg-gray-700 rounded-full shadow-lg border border-gray-200 dark:border-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-blue-600 z-10"
-              >
-                <ChevronRight className="w-6 h-6" />
-              </button>
+                <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
+                  {items.map((item, index) => (
+                    <SortableStepItem 
+                      key={item.id} 
+                      item={item} 
+                      index={index} 
+                      isActive={currentStepIndex === index}
+                      onClick={() => setCurrentStepIndex(index)}
+                      onRemove={(e) => {
+                        e.stopPropagation();
+                        handleRemoveItem(index);
+                      }}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+
+            {items.length === 0 && (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl mb-4">
+                Belum ada tahapan
+              </div>
             )}
 
+            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tambah Tahapan Baru:</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => handleAddItem('MATERI')} className="flex items-center justify-center px-2 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/40 rounded-lg text-xs font-medium transition-colors">
+                  <Plus className="w-3 h-3 mr-1" /> Materi Teks
+                </button>
+                <button onClick={() => handleAddItem('PDF')} className="flex items-center justify-center px-2 py-2 bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 rounded-lg text-xs font-medium transition-colors">
+                  <Plus className="w-3 h-3 mr-1" /> PDF
+                </button>
+                <button onClick={() => handleAddItem('YOUTUBE')} className="flex items-center justify-center px-2 py-2 bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 rounded-lg text-xs font-medium transition-colors">
+                  <Plus className="w-3 h-3 mr-1" /> YouTube
+                </button>
+                <button onClick={() => handleAddItem('KUIS')} className="flex items-center justify-center px-2 py-2 bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/40 rounded-lg text-xs font-medium transition-colors">
+                  <Plus className="w-3 h-3 mr-1" /> Kuis/Soal
+                </button>
+                <button onClick={() => handleAddItem('TUGAS')} className="flex items-center justify-center px-2 py-2 bg-purple-50 text-purple-600 hover:bg-purple-100 dark:bg-purple-900/20 dark:text-purple-400 dark:hover:bg-purple-900/40 rounded-lg text-xs font-medium transition-colors col-span-2">
+                  <Plus className="w-3 h-3 mr-1" /> Tugas Upload
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="flex-1">
+          {items.length > 0 ? (
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
               {(() => {
                 const item = items[currentStepIndex];
                 const index = currentStepIndex;
+                if (!item) return null;
                 return (
                   <div key={item.id}>
                     <div className="bg-gray-50 dark:bg-gray-800/80 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">  
-                <div className="flex items-center space-x-3">
-                  <GripVertical className="w-5 h-5 text-gray-400 cursor-move" />
-                  <span className="font-medium text-gray-700 dark:text-gray-300">
-                    Tahap {index + 1}: {
-                      item.tipe_item === 'MATERI' ? 'Materi Teks' :
-                      item.tipe_item === 'PDF' ? 'Dokumen PDF' :
-                      item.tipe_item === 'YOUTUBE' ? 'Video YouTube' :
-                      item.tipe_item === 'KUIS' ? 'Kuis/Soal' : 'Tugas Upload'
-                    }
-                  </span>
-                </div>
-                <div className="flex items-center space-x-1">
-                  <button onClick={() => handleMoveUp(index)} disabled={index === 0} className="text-gray-400 hover:text-blue-600 disabled:opacity-30 p-1" title="Pindah ke Atas">
-                    <ArrowUp className="w-5 h-5" />
-                  </button>
-                  <button onClick={() => handleMoveDown(index)} disabled={index === items.length - 1} className="text-gray-400 hover:text-blue-600 disabled:opacity-30 p-1" title="Pindah ke Bawah">
-                    <ArrowDown className="w-5 h-5" />
-                  </button>
-                  <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1"></div>
-                  <button onClick={() => handleRemoveItem(index)} className="text-red-500 hover:text-red-700 p-1" title="Hapus Tahapan">
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-              <div className="p-4 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Judul Tahapan *</label>
-                  <input
-                    type="text"
-                    value={item.judul_item}
-                    onChange={(e) => handleItemChange(index, 'judul_item', e.target.value)}
-                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                    placeholder="Contoh: Bacaan Bab 1"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Instruksi / Penjelasan</label>
-                  <textarea
-                    value={item.deskripsi}
-                    onChange={(e) => handleItemChange(index, 'deskripsi', e.target.value)}
-                    rows={2}
-                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                    placeholder="Berikan instruksi apa yang harus dilakukan siswa pada tahap ini..."
-                  />
-                </div>
+                      <div className="flex items-center space-x-3">
+                        <span className="font-medium text-gray-700 dark:text-gray-300">
+                          Tahap {index + 1}: {
+                            item.tipe_item === 'MATERI' ? 'Materi Teks' :
+                            item.tipe_item === 'PDF' ? 'Dokumen PDF' :
+                            item.tipe_item === 'YOUTUBE' ? 'Video YouTube' :
+                            item.tipe_item === 'KUIS' ? 'Kuis/Soal' : 'Tugas Upload'
+                          }
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <button onClick={() => handleRemoveItem(index)} className="text-red-500 hover:text-red-700 p-1" title="Hapus Tahapan">
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="p-4 space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Judul Tahapan *</label>
+                        <input
+                          type="text"
+                          value={item.judul_item}
+                          onChange={(e) => handleItemChange(index, 'judul_item', e.target.value)}
+                          className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                          placeholder="Contoh: Bacaan Bab 1"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Instruksi / Penjelasan</label>
+                        <textarea
+                          value={item.deskripsi}
+                          onChange={(e) => handleItemChange(index, 'deskripsi', e.target.value)}
+                          rows={2}
+                          className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                          placeholder="Berikan instruksi apa yang harus dilakukan siswa pada tahap ini..."
+                        />
+                      </div>
 
                 {/* Feedback & Pertanyaan Settings */}
                 <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800/50 space-y-4">
@@ -1063,29 +1205,13 @@ export default function ModulForm() {
                 );
               })()}
             </div>
-          </div>
-        ) : (
-          <div className="bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-8 text-center">
-            <p className="text-gray-500 dark:text-gray-400 mb-4">Belum ada tahapan belajar. Silakan tambahkan tahapan di bawah.</p>
-          </div>
-        )}
-
-        <div className="flex flex-wrap gap-3 pt-2">
-          <button onClick={() => handleAddItem('MATERI')} className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center">
-            <Plus className="w-4 h-4 mr-2" /> Materi Teks
-          </button>
-          <button onClick={() => handleAddItem('PDF')} className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center">
-            <Plus className="w-4 h-4 mr-2" /> Dokumen PDF
-          </button>
-          <button onClick={() => handleAddItem('YOUTUBE')} className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center">
-            <Plus className="w-4 h-4 mr-2" /> Video YouTube
-          </button>
-          <button onClick={() => handleAddItem('KUIS')} className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center">
-            <Plus className="w-4 h-4 mr-2" /> Kuis/Soal
-          </button>
-          <button onClick={() => handleAddItem('TUGAS')} className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center">
-            <Plus className="w-4 h-4 mr-2" /> Tugas Upload
-          </button>
+          ) : (
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
+              <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Belum ada tahapan belajar</h3>
+              <p className="text-gray-500 dark:text-gray-400">Pilih jenis tahapan di menu samping untuk mulai menambahkan materi.</p>
+            </div>
+          )}
         </div>
       </div>
 

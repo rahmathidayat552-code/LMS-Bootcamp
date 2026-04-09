@@ -222,7 +222,7 @@ export default function Login() {
           <div className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
             <p>
               Belum punya akun?{' '}
-              <Link to="/register" className="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300">
+              <Link to="/register" state={{ from }} className="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300">
                 Registrasi di sini
               </Link>
             </p>
