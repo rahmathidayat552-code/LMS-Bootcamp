@@ -14,6 +14,9 @@ import ModulList from './pages/guru/Modul';
 import ModulForm from './pages/guru/ModulForm';
 import ModulMonitoring from './pages/guru/ModulMonitoring';
 import Penilaian from './pages/guru/Penilaian';
+import PenilaianSiswa from './pages/guru/PenilaianSiswa';
+import PenilaianDetail from './pages/guru/PenilaianDetail';
+import PenilaianBobot from './pages/guru/PenilaianBobot';
 import ModulSiswaList from './pages/siswa/ModulList';
 import ModulSiswaDetail from './pages/siswa/ModulDetail';
 import Settings from './pages/Settings';
@@ -110,6 +113,21 @@ export default function App() {
               <Route path="guru/penilaian" element={
                 <ProtectedRoute allowedRoles={['GURU']}>
                   <Penilaian />
+                </ProtectedRoute>
+              } />
+              <Route path="guru/penilaian/:modulId" element={
+                <ProtectedRoute allowedRoles={['GURU']}>
+                  <PenilaianSiswa />
+                </ProtectedRoute>
+              } />
+              <Route path="guru/penilaian/:modulId/:siswaId" element={
+                <ProtectedRoute allowedRoles={['GURU']}>
+                  <PenilaianDetail />
+                </ProtectedRoute>
+              } />
+              <Route path="guru/penilaian/:modulId/bobot" element={
+                <ProtectedRoute allowedRoles={['GURU']}>
+                  <PenilaianBobot />
                 </ProtectedRoute>
               } />
               

@@ -170,7 +170,8 @@ service cloud.firestore {
              (!('file_submission' in data) || data.file_submission == null || (data.file_submission is string && data.file_submission.size() < 1000)) &&
              (!('link_tugas' in data) || data.link_tugas == null || (data.link_tugas is string && data.link_tugas.size() < 1000)) &&
              (!('jawaban' in data) || data.jawaban == null || data.jawaban is map) &&
-             (!('selesai_pada' in data) || data.selesai_pada == null || data.selesai_pada is timestamp);
+             (!('selesai_pada' in data) || data.selesai_pada == null || data.selesai_pada is timestamp) &&
+             (!('dinilai_pada' in data) || data.dinilai_pada == null || data.dinilai_pada is timestamp);
     }
 
     function isValidMasterUser(data) {
@@ -192,6 +193,16 @@ service cloud.firestore {
              (!('modul_id' in data) || data.modul_id == null || (data.modul_id is string && data.modul_id.size() > 0)) &&
              (!('modul_judul' in data) || data.modul_judul == null || (data.modul_judul is string && data.modul_judul.size() > 0)) &&
              (!('created_at' in data) || data.created_at is timestamp);
+    }
+
+    function isValidPenilaianSettings(data) {
+      return hasRequiredFields(['modul_id', 'guru_id', 'bobot_konten1', 'bobot_konten2', 'bobot_konten3']) &&
+             data.modul_id is string && data.modul_id.size() > 0 &&
+             data.guru_id is string && data.guru_id.size() > 0 &&
+             data.bobot_konten1 is number && data.bobot_konten1 >= 0 && data.bobot_konten1 <= 100 &&
+             data.bobot_konten2 is number && data.bobot_konten2 >= 0 && data.bobot_konten2 <= 100 &&
+             data.bobot_konten3 is number && data.bobot_konten3 >= 0 && data.bobot_konten3 <= 100 &&
+             (!('updated_at' in data) || data.updated_at == null || data.updated_at is timestamp);
     }
 
     // ===============================================================
@@ -267,6 +278,12 @@ service cloud.firestore {
     match /settings/{settingId} {
       allow read: if true; // Anyone can read settings (e.g. logo)
       allow write: if isAdmin(); // Only admin can update settings
+    }
+
+    match /penilaian_settings/{modulId} {
+      allow read: if isAuthenticated();
+      allow create, update: if (isAdmin() || (isGuru() && request.resource.data.guru_id == request.auth.uid)) && isValidPenilaianSettings(request.resource.data);
+      allow delete: if isAdmin() || (isGuru() && resource.data.guru_id == request.auth.uid);
     }
   }
 }
