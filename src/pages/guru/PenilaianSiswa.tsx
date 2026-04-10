@@ -10,6 +10,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useSettings } from '../../contexts/SettingsContext';
 
+import { calculateGrade } from '../../utils/gradeCalculator';
+
 interface SiswaData {
   id: string;
   nama_lengkap: string;
@@ -121,41 +123,8 @@ export default function PenilaianSiswa() {
               const user = usersMap[siswaId];
               if (!user) return;
 
-              // Calculate Grades
-              let sumK1 = 0, countK1 = 0;
-              let sumK2 = 0, countK2 = 0;
-              let sumK3 = 0, countK3 = 0;
-              let allTugasGraded = true;
-
-              items.forEach(item => {
-                const p = progressList.find(prog => prog.modul_item_id === item.id);
-                if (!p) return;
-
-                if (['MATERI', 'PDF', 'YOUTUBE'].includes(item.tipe_item)) {
-                  sumK1 += p.status_selesai ? 10 : 0;
-                  countK1++;
-                } else if (item.tipe_item === 'KUIS') {
-                  // Assuming nilai is stored in progress for KUIS
-                  sumK2 += p.nilai || 0;
-                  countK2++;
-                } else if (item.tipe_item === 'TUGAS') {
-                  if (p.nilai !== undefined && p.nilai !== null) {
-                    sumK3 += p.nilai;
-                  } else {
-                    allTugasGraded = false;
-                  }
-                  countK3++;
-                }
-              });
-
-              const rataK1 = countK1 > 0 ? sumK1 / countK1 : 0;
-              const rataK2 = countK2 > 0 ? sumK2 / countK2 : 0;
-              const rataK3 = countK3 > 0 ? sumK3 / countK3 : 0;
-
-              let finalGrade: number | null = null;
-              if (allTugasGraded) {
-                finalGrade = (rataK1 * (w1/100)) + (rataK2 * (w2/100)) + (rataK3 * (w3/100));
-              }
+              // Calculate Grades using robust utility
+              const gradeResult = calculateGrade(items, progressList, bobot);
 
               // Find latest completion date
               const latestDate = progressList.reduce((latest, current) => {
@@ -172,8 +141,8 @@ export default function PenilaianSiswa() {
                 kelas_id: user.kelas_id,
                 kelas_nama: kelasMap[user.kelas_id] || 'Unknown',
                 tanggal_selesai: latestDate,
-                nilai_akhir: finalGrade,
-                status: allTugasGraded ? 'Sudah Dinilai' : 'Menunggu'
+                nilai_akhir: gradeResult.finalGrade,
+                status: gradeResult.needsGrading ? 'Menunggu' : 'Sudah Dinilai'
               });
             }
           });

@@ -3,14 +3,16 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
-import { BookOpen, Users, Settings, LogOut, Menu, X, Moon, Sun, Monitor, LayoutDashboard, FileCheck, RefreshCw } from 'lucide-react';
+import { BookOpen, Users, Settings, LogOut, Menu, X, Moon, Sun, Monitor, LayoutDashboard, FileCheck, RefreshCw, Bell } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
+import { useNotifications } from '../contexts/NotificationContext';
 
 export default function Layout() {
   const { profile, logout, refreshProfile } = useAuth();
   const { theme, setTheme } = useTheme();
   const { settings } = useSettings();
+  const { unreadCount, requestPermission } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
@@ -41,6 +43,13 @@ export default function Layout() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    // Request notification permission when layout mounts if not already granted/denied
+    if ('Notification' in window && Notification.permission === 'default') {
+      requestPermission();
+    }
+  }, [requestPermission]);
 
   const isDarkMode = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
@@ -166,6 +175,16 @@ export default function Layout() {
             )}
           </div>
           <div className="flex items-center space-x-2">
+            <button 
+              onClick={() => navigate('/notifikasi')}
+              className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 relative text-gray-600 dark:text-gray-400"
+              title="Notifikasi"
+            >
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-gray-800"></span>
+              )}
+            </button>
             <button 
               onClick={handleRefreshProfile} 
               disabled={isRefreshing}

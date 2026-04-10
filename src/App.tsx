@@ -21,12 +21,14 @@ import ModulSiswaList from './pages/siswa/ModulList';
 import ModulSiswaDetail from './pages/siswa/ModulDetail';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
+import Notifications from './pages/Notifications';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toaster } from 'sonner';
 
 import ForgotPassword from './pages/ForgotPassword';
 
 import { SettingsProvider } from './contexts/SettingsContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
   const { user, profile, loading } = useAuth();
@@ -53,9 +55,10 @@ export default function App() {
       <ThemeProvider>
         <SettingsProvider>
           <AuthProvider>
-            <Toaster position="top-right" richColors />
-            <Router>
-          <Routes>
+            <NotificationProvider>
+              <Toaster position="top-right" richColors />
+              <Router>
+            <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -149,6 +152,11 @@ export default function App() {
                   <Profile />
                 </ProtectedRoute>
               } />
+              <Route path="notifikasi" element={
+                <ProtectedRoute allowedRoles={['ADMIN', 'GURU', 'SISWA']}>
+                  <Notifications />
+                </ProtectedRoute>
+              } />
               <Route path="pengaturan" element={
                 <ProtectedRoute allowedRoles={['ADMIN', 'GURU', 'SISWA']}>
                   <Settings />
@@ -157,6 +165,7 @@ export default function App() {
             </Route>
           </Routes>
         </Router>
+        </NotificationProvider>
         </AuthProvider>
         </SettingsProvider>
       </ThemeProvider>

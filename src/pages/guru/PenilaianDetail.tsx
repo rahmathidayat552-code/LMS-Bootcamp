@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, getDoc, doc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, getDoc, doc, onSnapshot, updateDoc, serverTimestamp, addDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, Loader2, ExternalLink, Save, CheckCircle, XCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
+import { calculateGrade } from '../../utils/gradeCalculator';
 
 export default function PenilaianDetail() {
   const { modulId, siswaId } = useParams();
@@ -115,6 +116,20 @@ export default function PenilaianDetail() {
           dinilai_pada: serverTimestamp()
         });
         toast.success('Nilai berhasil disimpan');
+
+        // Create notification for student
+        const item = items.find(i => i.id === itemId);
+        if (item && siswaId) {
+          await addDoc(collection(db, 'notifications'), {
+            user_id: siswaId,
+            title: 'Nilai Diperbarui',
+            message: `Guru telah memberikan nilai untuk "${item.judul_item}" pada modul ${modul?.judul_modul || ''}.`,
+            link: `/siswa/modul/${modulId}`,
+            is_read: false,
+            created_at: serverTimestamp()
+          });
+        }
+
       } else {
         toast.error('Data progres tidak ditemukan');
       }
@@ -139,38 +154,10 @@ export default function PenilaianDetail() {
   const k2Items = items.filter(i => i.tipe_item === 'KUIS');
   const k3Items = items.filter(i => i.tipe_item === 'TUGAS');
 
-  let sumK1 = 0, countK1 = 0;
-  let sumK2 = 0, countK2 = 0;
-  let sumK3 = 0, countK3 = 0;
-  let allTugasGraded = true;
+  const progressList = Object.values(progress);
+  const gradeResult = calculateGrade(items, progressList, bobot);
 
-  k1Items.forEach(item => {
-    const p = progress[item.id];
-    sumK1 += p?.status_selesai ? 10 : 0;
-    countK1++;
-  });
-
-  k2Items.forEach(item => {
-    const p = progress[item.id];
-    sumK2 += p?.nilai || 0;
-    countK2++;
-  });
-
-  k3Items.forEach(item => {
-    const p = progress[item.id];
-    if (p?.nilai !== undefined && p?.nilai !== null) {
-      sumK3 += p.nilai;
-    } else {
-      allTugasGraded = false;
-    }
-    countK3++;
-  });
-
-  const rataK1 = countK1 > 0 ? sumK1 / countK1 : 0;
-  const rataK2 = countK2 > 0 ? sumK2 / countK2 : 0;
-  const rataK3 = countK3 > 0 ? sumK3 / countK3 : 0;
-
-  // Normalize weights
+  // Normalize weights for UI display
   let w1 = k1Items.length > 0 ? bobot.k1 : 0;
   let w2 = k2Items.length > 0 ? bobot.k2 : 0;
   let w3 = k3Items.length > 0 ? bobot.k3 : 0;
@@ -180,8 +167,6 @@ export default function PenilaianDetail() {
     w2 = (w2 / totalW) * 100;
     w3 = (w3 / totalW) * 100;
   }
-
-  const finalGrade = allTugasGraded ? (rataK1 * (w1/100)) + (rataK2 * (w2/100)) + (rataK3 * (w3/100)) : null;
 
   return (
     <motion.div
@@ -230,10 +215,10 @@ export default function PenilaianDetail() {
             <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex justify-between items-center">
               <div>
                 <h3 className="font-bold text-gray-900 dark:text-white">KONTEN 1 — Materi Pembelajaran</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">* dinilai otomatis (selesai = 10, belum = 0)</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">* dinilai otomatis (selesai = 100, belum = 0)</p>
               </div>
               <div className="text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-3 py-1 rounded-full">
-                Bobot: {Math.round(w1)}%
+                Bobot: {Math.round(bobot.k1)}%
               </div>
             </div>
             <div className="p-0">
@@ -284,7 +269,7 @@ export default function PenilaianDetail() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white align-top">
-                          {isDone ? '10' : '0'}
+                          {isDone ? '100' : '0'}
                         </td>
                       </tr>
                     );
@@ -473,29 +458,35 @@ export default function PenilaianDetail() {
           <div className="space-y-2 mb-6 text-sm text-gray-300">
             {k1Items.length > 0 && (
               <div className="flex justify-between">
-                <span>Konten 1: {rataK1.toFixed(1)} × {Math.round(w1)}%</span>
-                <span>= {(rataK1 * (w1/100)).toFixed(2)}</span>
+                <span>Konten 1: {gradeResult.breakdown.K1 !== null ? gradeResult.breakdown.K1.toFixed(1) : '0'} × {Math.round(w1)}%</span>
+                <span>= {gradeResult.breakdown.K1 !== null ? (gradeResult.breakdown.K1 * (w1/100)).toFixed(2) : '0.00'}</span>
               </div>
             )}
             {k2Items.length > 0 && (
               <div className="flex justify-between">
-                <span>Konten 2: {rataK2.toFixed(1)} × {Math.round(w2)}%</span>
-                <span>= {(rataK2 * (w2/100)).toFixed(2)}</span>
+                <span>Konten 2: {gradeResult.breakdown.K2 !== null ? gradeResult.breakdown.K2.toFixed(1) : '0'} × {Math.round(w2)}%</span>
+                <span>= {gradeResult.breakdown.K2 !== null ? (gradeResult.breakdown.K2 * (w2/100)).toFixed(2) : '0.00'}</span>
               </div>
             )}
             {k3Items.length > 0 && (
               <div className="flex justify-between">
-                <span>Konten 3: {rataK3.toFixed(1)} × {Math.round(w3)}%</span>
-                <span>= {(rataK3 * (w3/100)).toFixed(2)}</span>
+                <span>Konten 3: {gradeResult.breakdown.K3 !== null ? gradeResult.breakdown.K3.toFixed(1) : '0'} × {Math.round(w3)}%</span>
+                <span>= {gradeResult.breakdown.K3 !== null ? (gradeResult.breakdown.K3 * (w3/100)).toFixed(2) : '0.00'}</span>
               </div>
             )}
-            <div className="border-t border-gray-700 pt-2 flex justify-between font-bold text-white text-base">
-              <span>Nilai Akhir:</span>
-              <span>{finalGrade !== null ? finalGrade.toFixed(2) : '-'} / 100</span>
+            
+            <div className="border-t border-gray-700 pt-2 flex justify-between text-gray-400 text-sm">
+              <span>Nilai Saat Ini (Current Grade):</span>
+              <span>{gradeResult.currentGrade !== null ? gradeResult.currentGrade.toFixed(2) : '0.00'} / 100</span>
+            </div>
+
+            <div className="flex justify-between font-bold text-white text-base">
+              <span>Nilai Akhir (Final Grade):</span>
+              <span>{gradeResult.finalGrade !== null ? gradeResult.finalGrade.toFixed(2) : '-'} / 100</span>
             </div>
           </div>
 
-          {!allTugasGraded && (
+          {gradeResult.needsGrading && (
             <div className="bg-yellow-500/20 border border-yellow-500/50 text-yellow-200 px-4 py-3 rounded-lg text-sm flex items-center">
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               Menunggu penilaian tugas... Nilai akhir belum dapat dihitung.
