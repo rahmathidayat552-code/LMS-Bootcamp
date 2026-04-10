@@ -73,6 +73,7 @@ export default function Layout() {
     { name: 'Manajemen Siswa', path: '/admin/siswa', icon: Users, roles: ['ADMIN'] },
     { name: 'Manajemen Pengguna', path: '/admin/users', icon: Users, roles: ['ADMIN'] },
     { name: 'Modul Belajar', path: '/guru/modul', icon: BookOpen, roles: ['GURU'] },
+    { name: 'Modul Kursus', path: '/guru/kursus', icon: BookOpen, roles: ['GURU'] },
     { name: 'Penilaian', path: '/guru/penilaian', icon: FileCheck, roles: ['GURU'] },
     { name: 'Modul Belajar', path: '/siswa/modul', icon: BookOpen, roles: ['SISWA'] },
     { name: 'Edit Profil', path: '/profil', icon: Users, roles: ['ADMIN', 'GURU', 'SISWA'] },

@@ -17,6 +17,7 @@ export default function PenilaianDetail() {
   const [progress, setProgress] = useState<Record<string, any>>({});
   const [bobot, setBobot] = useState({ k1: 20, k2: 30, k3: 50 });
   const [inputNilai, setInputNilai] = useState<Record<string, string>>({});
+  const [inputCatatan, setInputCatatan] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -72,15 +73,20 @@ export default function PenilaianDetail() {
         const unsub = onSnapshot(progressQuery, (snapshot) => {
           const progMap: Record<string, any> = {};
           const inputs: Record<string, string> = {};
+          const catatans: Record<string, string> = {};
           snapshot.docs.forEach(d => {
             const data = d.data();
             progMap[data.modul_item_id] = { id: d.id, ...data };
             if (data.nilai !== undefined && data.nilai !== null) {
               inputs[data.modul_item_id] = String(data.nilai);
             }
+            if (data.catatan_guru) {
+              catatans[data.modul_item_id] = data.catatan_guru;
+            }
           });
           setProgress(progMap);
           setInputNilai(prev => ({ ...inputs, ...prev })); // Keep existing unsaved inputs if any
+          setInputCatatan(prev => ({ ...catatans, ...prev }));
           setLoading(false);
         });
 
@@ -97,6 +103,8 @@ export default function PenilaianDetail() {
 
   const handleSaveNilai = async (itemId: string, progressId: string) => {
     const nilaiStr = inputNilai[itemId];
+    const catatanStr = inputCatatan[itemId] || '';
+    
     if (!nilaiStr || nilaiStr.trim() === '') {
       toast.error('Masukkan nilai terlebih dahulu');
       return;
@@ -113,17 +121,22 @@ export default function PenilaianDetail() {
       if (progressId) {
         await updateDoc(doc(db, 'progres_siswa', progressId), {
           nilai: nilaiNum,
+          catatan_guru: catatanStr,
           dinilai_pada: serverTimestamp()
         });
-        toast.success('Nilai berhasil disimpan');
+        toast.success('Nilai dan catatan berhasil disimpan');
 
         // Create notification for student
         const item = items.find(i => i.id === itemId);
         if (item && siswaId) {
+          let message = `Guru telah memberikan nilai untuk "${item.judul_item}" pada modul ${modul?.judul_modul || ''}.`;
+          if (catatanStr.trim() !== '') {
+            message += ` Ada catatan baru dari guru.`;
+          }
           await addDoc(collection(db, 'notifications'), {
             user_id: siswaId,
             title: 'Nilai Diperbarui',
-            message: `Guru telah memberikan nilai untuk "${item.judul_item}" pada modul ${modul?.judul_modul || ''}.`,
+            message: message,
             link: `/siswa/modul/${modulId}`,
             is_read: false,
             created_at: serverTimestamp()
@@ -419,22 +432,37 @@ export default function PenilaianDetail() {
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Beri Nilai (0 - 100)
                         </label>
-                        <div className="flex items-center space-x-3">
+                        <div className="flex flex-col space-y-3">
                           <input
                             type="number"
                             min="0"
                             max="100"
                             value={inputNilai[item.id] || ''}
                             onChange={(e) => setInputNilai(prev => ({ ...prev, [item.id]: e.target.value }))}
-                            className="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            className="w-full md:w-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            placeholder="Nilai"
                           />
+                          
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                              Catatan Guru (Opsional)
+                            </label>
+                            <textarea
+                              value={inputCatatan[item.id] || ''}
+                              onChange={(e) => setInputCatatan(prev => ({ ...prev, [item.id]: e.target.value }))}
+                              rows={3}
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"
+                              placeholder="Berikan masukan atau catatan untuk siswa..."
+                            />
+                          </div>
+
                           <button
                             onClick={() => handleSaveNilai(item.id, p?.id)}
                             disabled={saving[item.id] || !p?.id}
-                            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                            className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 w-full md:w-auto"
                           >
                             {saving[item.id] ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-                            Simpan
+                            Simpan Nilai & Catatan
                           </button>
                         </div>
                         {isGraded && (

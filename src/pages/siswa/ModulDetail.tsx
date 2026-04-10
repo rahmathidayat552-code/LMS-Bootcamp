@@ -1229,6 +1229,18 @@ export default function ModulSiswaDetail() {
           <div className="p-6 md:p-8">
             {renderContent()}
             {renderFeedbackForm()}
+            
+            {/* Catatan Guru */}
+            {progress[currentItem.id]?.catatan_guru && (
+              <div className="mt-8 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+                <h3 className="text-sm font-bold text-blue-800 dark:text-blue-300 mb-2 flex items-center">
+                  <CheckCircle className="w-4 h-4 mr-2" /> Catatan dari Guru
+                </h3>
+                <p className="text-sm text-blue-900 dark:text-blue-200 whitespace-pre-wrap">
+                  {progress[currentItem.id].catatan_guru}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
