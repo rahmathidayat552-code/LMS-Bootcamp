@@ -72,6 +72,7 @@ export default function Layout() {
     { name: 'Manajemen Guru', path: '/admin/guru', icon: Users, roles: ['ADMIN'] },
     { name: 'Manajemen Siswa', path: '/admin/siswa', icon: Users, roles: ['ADMIN'] },
     { name: 'Manajemen Pengguna', path: '/admin/users', icon: Users, roles: ['ADMIN'] },
+    { name: 'Manajemen Kursus', path: '/admin/kursus', icon: BookOpen, roles: ['ADMIN'] },
     { name: 'Modul Belajar', path: '/guru/modul', icon: BookOpen, roles: ['GURU'] },
     { name: 'Modul Kursus', path: '/guru/kursus', icon: BookOpen, roles: ['GURU'] },
     { name: 'Penilaian', path: '/guru/penilaian', icon: FileCheck, roles: ['GURU'] },
@@ -80,7 +81,12 @@ export default function Layout() {
     { name: 'Pengaturan', path: '/pengaturan', icon: Settings, roles: ['ADMIN', 'GURU', 'SISWA'] },
   ];
 
-  const filteredNavItems = navItems.filter(item => profile && item.roles.includes(profile.role));
+  const filteredNavItems = navItems.filter(item => {
+    if (!profile) return false;
+    if (!item.roles.includes(profile.role)) return false;
+    if (item.name === 'Modul Kursus' && !profile.is_trainer) return false;
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex">

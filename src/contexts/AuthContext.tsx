@@ -26,6 +26,7 @@ export interface UserProfile {
   username?: string;
   no_wa?: string;
   foto_url?: string;
+  is_trainer?: boolean;
 }
 
 interface AuthContextType {

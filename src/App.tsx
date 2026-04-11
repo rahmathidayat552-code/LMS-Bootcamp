@@ -10,6 +10,7 @@ import Users from './pages/admin/Users';
 import Kelas from './pages/admin/Kelas';
 import ManajemenSiswa from './pages/admin/ManajemenSiswa';
 import ManajemenGuru from './pages/admin/ManajemenGuru';
+import ManajemenKursus from './pages/admin/ManajemenKursus';
 import ModulList from './pages/guru/Modul';
 import ModulForm from './pages/guru/ModulForm';
 import ModulMonitoring from './pages/guru/ModulMonitoring';
@@ -90,6 +91,11 @@ export default function App() {
               <Route path="admin/siswa" element={
                 <ProtectedRoute allowedRoles={['ADMIN']}>
                   <ManajemenSiswa />
+                </ProtectedRoute>
+              } />
+              <Route path="admin/kursus" element={
+                <ProtectedRoute allowedRoles={['ADMIN']}>
+                  <ManajemenKursus />
                 </ProtectedRoute>
               } />
               
