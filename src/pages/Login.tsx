@@ -23,17 +23,7 @@ export default function Login() {
 
   // Redirect if already logged in
   React.useEffect(() => {
-    if (user || profile) {
-      console.log("Login Page Auth Check:", { 
-        email: user?.email, 
-        uid: user?.uid, 
-        hasProfile: !!profile, 
-        role: profile?.role 
-      });
-    }
-    
     if (user && profile) {
-      console.log("Redirecting to:", from);
       navigate(from, { replace: true });
     }
   }, [user, profile, navigate, from]);

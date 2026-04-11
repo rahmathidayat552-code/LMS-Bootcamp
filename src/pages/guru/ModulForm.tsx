@@ -1,13 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { collection, query, where, getDocs, doc, writeBatch, getDoc } from 'firebase/firestore';
-import { db } from '../../firebase';
-import { useAuth } from '../../contexts/AuthContext';
-import { useNavigate, useParams, useOutletContext } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Save, GripVertical, ArrowUp, ArrowDown, Image as ImageIcon, X, Youtube, ExternalLink, ChevronLeft, ChevronRight, BookOpen, Users, CheckCircle, Eye } from 'lucide-react';
-import { toast } from 'sonner';
-import ReactQuill from 'react-quill-new';
-import 'react-quill-new/dist/quill.snow.css';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useRef } from 'react';
+import { useParams, useOutletContext } from 'react-router-dom';
+import { ArrowLeft, Plus, Trash2, Save, GripVertical, ArrowUp, ArrowDown, CheckCircle } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -25,71 +18,21 @@ import {
   useSortable
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { useModulForm, ModulItem } from './hooks/useModulForm';
+import ModulFormHeader from './ModulFormHeader';
+import ModulItemEditor from './ModulItemEditor';
 
-interface Kelas {
-  id: string;
-  nama_kelas: string;
-  tingkat: number;
-}
-
-interface Siswa {
-  id: string;
-  nama_lengkap: string;
-  kelas_id?: string;
-}
-
-interface ModulItem {
-  id: string;
-  tipe_item: 'MATERI' | 'PDF' | 'YOUTUBE' | 'KUIS' | 'TUGAS';
-  judul_item: string;
-  deskripsi: string;
-  konten: string; // For KUIS, this will be JSON stringified array of questions
-  urutan: number;
-  wajib_feedback?: boolean;
-  pertanyaan_feedback?: string;
-}
-
-interface KuisSoal {
-  pertanyaan: string;
-  gambar?: string; // Base64 image
-  opsi_a: string;
-  opsi_b: string;
-  opsi_c: string;
-  opsi_d: string;
-  kunci_jawaban: 'A' | 'B' | 'C' | 'D';
-  bobot_nilai: number;
-}
-
-const quillModules = {
-  toolbar: [
-    [{ 'header': [1, 2, 3, false] }],
-    ['bold', 'italic', 'underline', 'strike'],
-    [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-    ['link', 'blockquote', 'code-block'],
-    ['clean']
-  ],
-};
-
-const quillFormats = [
-  'header',
-  'bold', 'italic', 'underline', 'strike',
-  'list',
-  'link', 'blockquote', 'code-block'
-];
-
-const quizQuillModules = {
-  toolbar: [
-    ['bold', 'italic', 'underline'],
-    [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-    ['clean']
-  ]
-};
-
-const quizQuillFormats = [
-  'bold', 'italic', 'underline', 'list'
-];
-
-function SortableStepItem({ item, index, isActive, onClick, onRemove }: { item: ModulItem, index: number, isActive: boolean, onClick: () => void, onRemove: (e: React.MouseEvent) => void }) {
+function SortableStepItem({ item, index, isActive, onClick, onRemove, onMoveUp, onMoveDown, isFirst, isLast }: { 
+  item: ModulItem, 
+  index: number, 
+  isActive: boolean, 
+  onClick: () => void, 
+  onRemove: (e: React.MouseEvent) => void,
+  onMoveUp: (e: React.MouseEvent) => void,
+  onMoveDown: (e: React.MouseEvent) => void,
+  isFirst: boolean,
+  isLast: boolean
+}) {
   const {
     attributes,
     listeners,
@@ -126,39 +69,60 @@ function SortableStepItem({ item, index, isActive, onClick, onRemove }: { item: 
           </p>
         </div>
       </div>
-      <button onClick={onRemove} className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20">
-        <Trash2 className="w-4 h-4" />
-      </button>
+      <div className="flex items-center space-x-1">
+        <div className="flex flex-col mr-2">
+          <button 
+            onClick={onMoveUp} 
+            disabled={isFirst}
+            className={`p-0.5 rounded ${isFirst ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20'}`}
+          >
+            <ArrowUp className="w-3 h-3" />
+          </button>
+          <button 
+            onClick={onMoveDown} 
+            disabled={isLast}
+            className={`p-0.5 rounded ${isLast ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20'}`}
+          >
+            <ArrowDown className="w-3 h-3" />
+          </button>
+        </div>
+        <button onClick={onRemove} className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20">
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }
 
 export default function ModulForm() {
   const { id } = useParams();
-  const isEditing = !!id;
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const { isSidebarOpen } = useOutletContext<{ isSidebarOpen: boolean }>();
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const [loading, setLoading] = useState(false);
-  const [fetching, setFetching] = useState(isEditing);
   
-  // Form State
-  const [judulModul, setJudulModul] = useState('');
-  const [mataPelajaran, setMataPelajaran] = useState('');
-  const [deskripsi, setDeskripsi] = useState('');
-  const [tipeTarget, setTipeTarget] = useState<'KELAS' | 'SISWA'>('KELAS');
-  const [targetKelasIds, setTargetKelasIds] = useState<string[]>([]);
-  const [targetSiswaIds, setTargetSiswaIds] = useState<string[]>([]);
-  const [isPublished, setIsPublished] = useState(false);
-  const [ikon, setIkon] = useState<string | null>(null);
-  const [prasyaratId, setPrasyaratId] = useState<string>('');
-  
-  const [items, setItems] = useState<ModulItem[]>([]);
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
-
-  const [searchSiswa, setSearchSiswa] = useState('');
+  const {
+    isEditing,
+    loading,
+    fetching,
+    judulModul, setJudulModul,
+    mataPelajaran, setMataPelajaran,
+    deskripsi, setDeskripsi,
+    tipeTarget, setTipeTarget,
+    targetKelasIds, setTargetKelasIds,
+    targetSiswaIds, setTargetSiswaIds,
+    isPublished, setIsPublished,
+    ikon, setIkon,
+    prasyaratId, setPrasyaratId,
+    items, setItems,
+    currentStepIndex, setCurrentStepIndex,
+    kelasList,
+    siswaList,
+    existingModuls,
+    showPublishSuccess, setShowPublishSuccess,
+    handleAddItem,
+    handleRemoveItem,
+    handleItemChange,
+    handleSave,
+    navigate
+  } = useModulForm(id);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -167,131 +131,29 @@ export default function ModulForm() {
     })
   );
 
-  // Data State
-  const [kelasList, setKelasList] = useState<Kelas[]>([]);
-  const [siswaList, setSiswaList] = useState<Siswa[]>([]);
-  const [existingModuls, setExistingModuls] = useState<any[]>([]);
-  
-  const [showPublishSuccess, setShowPublishSuccess] = useState(false);
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Check for prerequisite from URL
-        const params = new URLSearchParams(window.location.hash.split('?')[1]);
-        const preId = params.get('prasyarat');
-        if (preId && !isEditing) {
-          setPrasyaratId(preId);
-          // Fetch the prerequisite module to pre-fill some fields
-          const preDoc = await getDoc(doc(db, 'moduls', preId));
-          if (preDoc.exists()) {
-            const preData = preDoc.data();
-            setMataPelajaran(preData.mata_pelajaran || '');
-            setTipeTarget(preData.tipe_target || 'KELAS');
-            setTargetKelasIds(preData.target_kelas_ids || []);
-            setTargetSiswaIds(preData.target_siswa_ids || []);
-          }
+    if (over && active.id !== over.id) {
+      setItems((items) => {
+        const oldIndex = items.findIndex((item) => item.id === active.id);
+        const newIndex = items.findIndex((item) => item.id === over.id);
+
+        const newItems = arrayMove(items, oldIndex, newIndex);
+        newItems.forEach((item, i) => {
+          item.urutan = i + 1;
+        });
+        
+        if (currentStepIndex === oldIndex) {
+          setCurrentStepIndex(newIndex);
+        } else if (currentStepIndex > oldIndex && currentStepIndex <= newIndex) {
+          setCurrentStepIndex(currentStepIndex - 1);
+        } else if (currentStepIndex < oldIndex && currentStepIndex >= newIndex) {
+          setCurrentStepIndex(currentStepIndex + 1);
         }
 
-        // Fetch Kelas
-        const kelasSnapshot = await getDocs(collection(db, 'kelas'));
-        setKelasList(kelasSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Kelas)));
-
-        // Fetch Siswa
-        const siswaQuery = query(collection(db, 'users'), where('role', '==', 'SISWA'));
-        const siswaSnapshot = await getDocs(siswaQuery);
-        setSiswaList(siswaSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Siswa)));
-
-        // Fetch Existing Moduls for Prerequisite
-        const modulsQuery = query(collection(db, 'moduls'), where('guru_id', '==', user?.uid));
-        const modulsSnapshot = await getDocs(modulsQuery);
-        setExistingModuls(modulsSnapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-
-        if (isEditing && id) {
-          // Fetch Modul
-          const modulDoc = await getDoc(doc(db, 'moduls', id));
-          if (modulDoc.exists()) {
-            const data = modulDoc.data();
-            setJudulModul(data.judul_modul || '');
-            setMataPelajaran(data.mata_pelajaran || '');
-            setDeskripsi(data.deskripsi || '');
-            setTipeTarget(data.tipe_target || 'KELAS');
-            setTargetKelasIds(data.target_kelas_ids || []);
-            setTargetSiswaIds(data.target_siswa_ids || []);
-            setIsPublished(data.is_published || false);
-            setIkon(data.ikon || null);
-            setPrasyaratId(data.prasyarat_id || '');
-
-            // Fetch Items
-            const itemsQuery = query(collection(db, 'modul_items'), where('modul_id', '==', id));
-            const itemsSnapshot = await getDocs(itemsQuery);
-            const fetchedItems = itemsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as ModulItem));
-            fetchedItems.sort((a, b) => a.urutan - b.urutan);
-            setItems(fetchedItems);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        toast.error('Gagal memuat data');
-      } finally {
-        setFetching(false);
-      }
-    };
-
-    fetchData();
-  }, [id, isEditing]);
-
-  useEffect(() => {
-    if (prasyaratId && existingModuls.length > 0) {
-      const preModul = existingModuls.find(m => m.id === prasyaratId);
-      if (preModul) {
-        setMataPelajaran(preModul.mata_pelajaran || '');
-        setTipeTarget(preModul.tipe_target || 'KELAS');
-        setTargetKelasIds(preModul.target_kelas_ids || []);
-        setTargetSiswaIds(preModul.target_siswa_ids || []);
-      }
-    }
-  }, [prasyaratId, existingModuls]);
-
-  const handleAddItem = (tipe: ModulItem['tipe_item']) => {
-    let defaultKonten = '';
-    if (tipe === 'KUIS') {
-      defaultKonten = '[]';
-    } else if (tipe === 'TUGAS') {
-      defaultKonten = JSON.stringify({
-        allow_link: true,
-        allow_file: false,
-        allowed_extensions: []
+        return newItems;
       });
-    }
-
-    const newItem: ModulItem = {
-      id: `temp_${Date.now()}`,
-      tipe_item: tipe,
-      judul_item: '',
-      deskripsi: '',
-      konten: defaultKonten,
-      urutan: items.length + 1,
-      wajib_feedback: true,
-      pertanyaan_feedback: ''
-    };
-    setItems([...items, newItem]);
-    setCurrentStepIndex(items.length); // Move to the newly added item
-  };
-
-  const handleRemoveItem = (index: number) => {
-    if (window.confirm('Apakah Anda yakin ingin menghapus tahapan ini?')) {
-      const newItems = [...items];
-      newItems.splice(index, 1);
-      // Reorder
-      newItems.forEach((item, i) => {
-        item.urutan = i + 1;
-      });
-      setItems(newItems);
-      if (currentStepIndex >= newItems.length) {
-        setCurrentStepIndex(Math.max(0, newItems.length - 1));
-      }
-      toast.success('Tahapan berhasil dihapus');
     }
   };
 
@@ -331,178 +193,6 @@ export default function ModulForm() {
     }
   };
 
-  const handleItemChange = (index: number, field: keyof ModulItem, value: any) => {
-    const newItems = [...items];
-    newItems[index] = { ...newItems[index], [field]: value };
-    setItems(newItems);
-  };
-
-  const handleSave = async (publish: boolean) => {
-    if (!judulModul || !mataPelajaran) {
-      toast.error('Judul modul dan mata pelajaran wajib diisi');
-      return;
-    }
-    if (tipeTarget === 'KELAS' && targetKelasIds.length === 0) {
-      toast.error('Pilih minimal satu kelas target');
-      return;
-    }
-    if (tipeTarget === 'SISWA' && targetSiswaIds.length === 0) {
-      toast.error('Pilih minimal satu siswa target');
-      return;
-    }
-    if (items.length === 0) {
-      toast.error('Tambahkan minimal satu tahapan belajar');
-      return;
-    }
-
-    // Validate items
-    for (let i = 0; i < items.length; i++) {
-      if (!items[i].judul_item) {
-        toast.error(`Judul tahapan ke-${i + 1} wajib diisi`);
-        return;
-      }
-      if (items[i].tipe_item === 'KUIS') {
-        try {
-          const questions = JSON.parse(items[i].konten || '[]');
-          if (questions.length === 0) {
-            toast.error(`Tahapan Kuis/Soal ke-${i + 1} harus memiliki minimal 1 pertanyaan`);
-            return;
-          }
-        } catch (e) {
-          toast.error(`Format kuis pada tahapan ke-${i + 1} tidak valid`);
-          return;
-        }
-      }
-      if (items[i].tipe_item === 'TUGAS') {
-        try {
-          const config = items[i].konten ? JSON.parse(items[i].konten) : { allow_link: true, allow_file: false };
-          if (!config.allow_link && !config.allow_file) {
-            toast.error(`Tahapan Tugas ke-${i + 1} harus mengizinkan minimal satu jenis pengumpulan (Link atau File)`);
-            return;
-          }
-        } catch (e) {
-          // Ignore
-        }
-      }
-    }
-
-    setLoading(true);
-    try {
-      const batch = writeBatch(db);
-      const modulRef = isEditing && id ? doc(db, 'moduls', id) : doc(collection(db, 'moduls'));
-      const modulId = modulRef.id;
-
-      const modulData: any = {
-        guru_id: user?.uid,
-        mata_pelajaran: mataPelajaran,
-        judul_modul: judulModul,
-        deskripsi,
-        tipe_target: tipeTarget,
-        target_kelas_ids: tipeTarget === 'KELAS' ? targetKelasIds : [],
-        target_siswa_ids: tipeTarget === 'SISWA' ? targetSiswaIds : [],
-        ikon,
-        prasyarat_id: prasyaratId,
-        is_published: publish,
-        created_at: new Date().toISOString() // ISO string for DB
-      };
-
-      if (publish) {
-        modulData.is_archived = false;
-      }
-
-      if (isEditing) {
-        batch.update(modulRef, modulData);
-      } else {
-        batch.set(modulRef, modulData);
-      }
-
-      // Handle items (For simplicity, we delete old items and recreate them if editing)
-      if (isEditing && id) {
-        const oldItemsQuery = query(collection(db, 'modul_items'), where('modul_id', '==', id));
-        const oldItemsSnapshot = await getDocs(oldItemsQuery);
-        oldItemsSnapshot.docs.forEach(d => {
-          batch.delete(d.ref);
-        });
-      }
-
-      items.forEach((item, index) => {
-        const itemRef = doc(collection(db, 'modul_items'));
-        batch.set(itemRef, {
-          modul_id: modulId,
-          tipe_item: item.tipe_item,
-          judul_item: item.judul_item,
-          deskripsi: item.deskripsi,
-          konten: item.konten,
-          urutan: index + 1,
-          wajib_feedback: item.wajib_feedback !== false,
-          pertanyaan_feedback: item.pertanyaan_feedback || '',
-          created_at: new Date().toISOString() // ISO string for DB
-        });
-      });
-
-      await batch.commit();
-      
-      if (publish) {
-        setShowPublishSuccess(true);
-        setTimeout(() => {
-          navigate('/guru/modul');
-        }, 3000);
-      } else {
-        toast.success('Modul berhasil disimpan sebagai draft');
-        navigate('/guru/modul');
-      }
-    } catch (error: any) {
-      console.error('Error saving modul:', error);
-      toast.error('Gagal menyimpan modul: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleIconUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 300000) { // 300KB limit for base64
-        toast.error('Ukuran file terlalu besar (maksimal 300KB)');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setIkon(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const filteredSiswaList = siswaList.filter(s => s.nama_lengkap.toLowerCase().includes(searchSiswa.toLowerCase()));
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-
-    if (over && active.id !== over.id) {
-      setItems((items) => {
-        const oldIndex = items.findIndex((item) => item.id === active.id);
-        const newIndex = items.findIndex((item) => item.id === over.id);
-
-        const newItems = arrayMove(items, oldIndex, newIndex);
-        newItems.forEach((item, i) => {
-          item.urutan = i + 1;
-        });
-        
-        // Update currentStepIndex if the active item was moved
-        if (currentStepIndex === oldIndex) {
-          setCurrentStepIndex(newIndex);
-        } else if (currentStepIndex > oldIndex && currentStepIndex <= newIndex) {
-          setCurrentStepIndex(currentStepIndex - 1);
-        } else if (currentStepIndex < oldIndex && currentStepIndex >= newIndex) {
-          setCurrentStepIndex(currentStepIndex + 1);
-        }
-
-        return newItems;
-      });
-    }
-  };
-
   if (fetching) {
     return <div className="flex justify-center items-center h-64">Memuat...</div>;
   }
@@ -520,192 +210,24 @@ export default function ModulForm() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 space-y-6">
-        <div className="space-y-4 border-b border-gray-100 dark:border-gray-700 pb-6">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Modul Prasyarat (Opsional)</label>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Siswa harus menyelesaikan modul ini sebelum bisa membuka modul yang sedang Anda buat.</p>
-          <select
-            value={prasyaratId}
-            onChange={(e) => setPrasyaratId(e.target.value)}
-            className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-          >
-            <option value="">-- Tanpa Prasyarat --</option>
-            {existingModuls
-              .filter(m => m.id !== id) // Don't allow self as prerequisite
-              .map(m => (
-                <option key={m.id} value={m.id}>{m.judul_modul} ({m.mata_pelajaran})</option>
-              ))
-            }
-          </select>
-        </div>
+      <ModulFormHeader 
+        judulModul={judulModul} setJudulModul={setJudulModul}
+        mataPelajaran={mataPelajaran} setMataPelajaran={setMataPelajaran}
+        deskripsi={deskripsi} setDeskripsi={setDeskripsi}
+        tipeTarget={tipeTarget} setTipeTarget={setTipeTarget}
+        targetKelasIds={targetKelasIds} setTargetKelasIds={setTargetKelasIds}
+        targetSiswaIds={targetSiswaIds} setTargetSiswaIds={setTargetSiswaIds}
+        kelasList={kelasList} siswaList={siswaList}
+        prasyaratId={prasyaratId} setPrasyaratId={setPrasyaratId}
+        existingModuls={existingModuls}
+        ikon={ikon} setIkon={setIkon}
+        fileInputRef={fileInputRef}
+      />
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-1 space-y-4">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ikon Modul (PNG/JPG)</label>
-            <div className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl hover:border-blue-500 transition-colors cursor-pointer relative group">
-              {ikon ? (
-                <div className="relative w-full aspect-square">
-                  <img src={ikon} alt="Icon Preview" className="w-full h-full object-cover rounded-lg" />
-                  <button 
-                    onClick={() => setIkon(null)}
-                    className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Plus className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">Klik untuk upload ikon</p>
-                  <p className="text-xs text-gray-400 mt-1">Maks 300KB</p>
-                </div>
-              )}
-              <input 
-                type="file" 
-                accept="image/png, image/jpeg" 
-                onChange={handleIconUpload}
-                className="absolute inset-0 opacity-0 cursor-pointer"
-              />
-            </div>
-          </div>
-
-          <div className="md:col-span-2 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Judul Modul *</label>
-              <input
-                type="text"
-                value={judulModul}
-                onChange={(e) => setJudulModul(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                placeholder="Contoh: Pengenalan Algoritma"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mata Pelajaran *</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={mataPelajaran}
-                  onChange={(e) => setMataPelajaran(e.target.value)}
-                  disabled={!!prasyaratId}
-                  className={`w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none ${prasyaratId ? 'opacity-70 cursor-not-allowed bg-gray-50 dark:bg-gray-800/50 border-blue-200 dark:border-blue-900/50' : ''}`}
-                  placeholder="Contoh: Pemrograman Dasar"
-                />
-                {prasyaratId && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <BookOpen className="w-4 h-4 text-blue-500 opacity-50" />
-                  </div>
-                )}
-              </div>
-              {prasyaratId && <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-1 italic flex items-center"><BookOpen className="w-3 h-3 mr-1" /> Mata pelajaran dikunci sesuai modul prasyarat</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Deskripsi Singkat</label>
-              <textarea
-                value={deskripsi}
-                onChange={(e) => setDeskripsi(e.target.value)}
-                rows={3}
-                className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                placeholder="Jelaskan secara singkat tentang modul ini..."
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Target Peserta *</label>
-          <div className="flex space-x-4 mb-4">
-            <label className={`flex items-center space-x-2 ${prasyaratId ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
-              <input
-                type="radio"
-                checked={tipeTarget === 'KELAS'}
-                onChange={() => setTipeTarget('KELAS')}
-                disabled={!!prasyaratId}
-                className="text-blue-600 focus:ring-blue-500 disabled:opacity-50"
-              />
-              <span className="text-sm dark:text-gray-300">Pilih Kelas</span>
-            </label>
-            <label className={`flex items-center space-x-2 ${prasyaratId ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
-              <input
-                type="radio"
-                checked={tipeTarget === 'SISWA'}
-                onChange={() => setTipeTarget('SISWA')}
-                disabled={!!prasyaratId}
-                className="text-blue-600 focus:ring-blue-500 disabled:opacity-50"
-              />
-              <span className="text-sm dark:text-gray-300">Pilih Siswa Tertentu</span>
-            </label>
-          </div>
-
-          {tipeTarget === 'KELAS' ? (
-            <div className={`border border-gray-200 dark:border-gray-700 rounded-lg p-4 max-h-48 overflow-y-auto bg-gray-50 dark:bg-gray-900/50 transition-opacity ${prasyaratId ? 'opacity-70 ring-1 ring-blue-100 dark:ring-blue-900/30' : ''}`}>
-              {kelasList.map(kelas => (
-                <label key={kelas.id} className={`flex items-center space-x-3 mb-2 last:mb-0 ${prasyaratId ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-                  <input
-                    type="checkbox"
-                    checked={targetKelasIds.includes(kelas.id)}
-                    onChange={(e) => {
-                      if (e.target.checked) setTargetKelasIds([...targetKelasIds, kelas.id]);
-                      else setTargetKelasIds(targetKelasIds.filter(id => id !== kelas.id));
-                    }}
-                    disabled={!!prasyaratId}
-                    className="rounded text-blue-600 focus:ring-blue-500 disabled:opacity-50"
-                  />
-                  <span className={`text-sm ${targetKelasIds.includes(kelas.id) && prasyaratId ? 'text-blue-700 dark:text-blue-300 font-medium' : 'dark:text-gray-300'}`}>
-                    {kelas.tingkat} {kelas.nama_kelas}
-                  </span>
-                </label>
-              ))}
-              {kelasList.length === 0 && <p className="text-sm text-gray-500">Belum ada data kelas.</p>}
-            </div>
-          ) : (
-            <div className={`border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-900/50 transition-opacity ${prasyaratId ? 'opacity-70 ring-1 ring-blue-100 dark:ring-blue-900/30' : ''}`}>
-              <div className="mb-3">
-                <input
-                  type="text"
-                  placeholder="Cari nama siswa..."
-                  value={searchSiswa}
-                  onChange={(e) => setSearchSiswa(e.target.value)}
-                  className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  disabled={!!prasyaratId}
-                />
-              </div>
-              <div className="max-h-48 overflow-y-auto">
-                {filteredSiswaList.map(siswa => (
-                  <label key={siswa.id} className={`flex items-center space-x-3 mb-2 last:mb-0 ${prasyaratId ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-                    <input
-                      type="checkbox"
-                      checked={targetSiswaIds.includes(siswa.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) setTargetSiswaIds([...targetSiswaIds, siswa.id]);
-                        else setTargetSiswaIds(targetSiswaIds.filter(id => id !== siswa.id));
-                      }}
-                      disabled={!!prasyaratId}
-                      className="rounded text-blue-600 focus:ring-blue-500 disabled:opacity-50"
-                    />
-                    <span className={`text-sm ${targetSiswaIds.includes(siswa.id) && prasyaratId ? 'text-blue-700 dark:text-blue-300 font-medium' : 'dark:text-gray-300'}`}>
-                      {siswa.nama_lengkap}
-                    </span>
-                  </label>
-                ))}
-                {filteredSiswaList.length === 0 && <p className="text-sm text-gray-500">Siswa tidak ditemukan.</p>}
-              </div>
-            </div>
-          )}
-          {prasyaratId && (
-            <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-1 italic flex items-center">
-              <Users className="w-3 h-3 mr-1" /> Target peserta dikunci sesuai modul prasyarat
-            </p>
-          )}
-        </div>
-
-      </div>
-
-      <div className="flex flex-col md:flex-row gap-6 mt-8">
-        {/* Sidebar */}
-        <div className="w-full md:w-80 shrink-0 space-y-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 border border-gray-200 dark:border-gray-700">
-            <h3 className="font-bold text-gray-900 dark:text-white mb-4">Daftar Tahapan</h3>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-4 space-y-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4">
+            <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-4">Tahapan Belajar</h3>
             
             <DndContext 
               sensors={sensors}
@@ -716,18 +238,28 @@ export default function ModulForm() {
                 items={items.map(i => i.id)}
                 strategy={verticalListSortingStrategy}
               >
-                <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
+                <div className="space-y-2 mb-4 max-h-[400px] overflow-y-auto pr-2">
                   {items.map((item, index) => (
-                    <SortableStepItem 
-                      key={item.id} 
-                      item={item} 
-                      index={index} 
+                    <SortableStepItem
+                      key={item.id}
+                      item={item}
+                      index={index}
                       isActive={currentStepIndex === index}
                       onClick={() => setCurrentStepIndex(index)}
                       onRemove={(e) => {
                         e.stopPropagation();
                         handleRemoveItem(index);
                       }}
+                      onMoveUp={(e) => {
+                        e.stopPropagation();
+                        handleMoveUp(index);
+                      }}
+                      onMoveDown={(e) => {
+                        e.stopPropagation();
+                        handleMoveDown(index);
+                      }}
+                      isFirst={index === 0}
+                      isLast={index === items.length - 1}
                     />
                   ))}
                 </div>
@@ -735,537 +267,135 @@ export default function ModulForm() {
             </DndContext>
 
             {items.length === 0 && (
-              <div className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl mb-4">
-                Belum ada tahapan
+              <div className="text-center py-8 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl mb-4">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Belum ada tahapan.</p>
+                <p className="text-xs text-gray-400 mt-1">Tambahkan tahapan pertama di bawah.</p>
               </div>
             )}
 
-            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tambah Tahapan Baru:</p>
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Tambah Tahapan Baru</p>
               <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => handleAddItem('MATERI')} className="flex items-center justify-center px-2 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/40 rounded-lg text-xs font-medium transition-colors">
-                  <Plus className="w-3 h-3 mr-1" /> Materi Teks
+                <button
+                  onClick={() => handleAddItem('MATERI')}
+                  className="flex items-center justify-center px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <Plus className="w-4 h-4 mr-1" /> Teks
                 </button>
-                <button onClick={() => handleAddItem('PDF')} className="flex items-center justify-center px-2 py-2 bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 rounded-lg text-xs font-medium transition-colors">
-                  <Plus className="w-3 h-3 mr-1" /> PDF
+                <button
+                  onClick={() => handleAddItem('PDF')}
+                  className="flex items-center justify-center px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <Plus className="w-4 h-4 mr-1" /> PDF
                 </button>
-                <button onClick={() => handleAddItem('YOUTUBE')} className="flex items-center justify-center px-2 py-2 bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40 rounded-lg text-xs font-medium transition-colors">
-                  <Plus className="w-3 h-3 mr-1" /> YouTube
+                <button
+                  onClick={() => handleAddItem('YOUTUBE')}
+                  className="flex items-center justify-center px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <Plus className="w-4 h-4 mr-1" /> Video
                 </button>
-                <button onClick={() => handleAddItem('KUIS')} className="flex items-center justify-center px-2 py-2 bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/40 rounded-lg text-xs font-medium transition-colors">
-                  <Plus className="w-3 h-3 mr-1" /> Kuis/Soal
+                <button
+                  onClick={() => handleAddItem('KUIS')}
+                  className="flex items-center justify-center px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <Plus className="w-4 h-4 mr-1" /> Kuis
                 </button>
-                <button onClick={() => handleAddItem('TUGAS')} className="flex items-center justify-center px-2 py-2 bg-purple-50 text-purple-600 hover:bg-purple-100 dark:bg-purple-900/20 dark:text-purple-400 dark:hover:bg-purple-900/40 rounded-lg text-xs font-medium transition-colors col-span-2">
-                  <Plus className="w-3 h-3 mr-1" /> Tugas Upload
+                <button
+                  onClick={() => handleAddItem('TUGAS')}
+                  className="col-span-2 flex items-center justify-center px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <Plus className="w-4 h-4 mr-1" /> Tugas Upload
                 </button>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="flex-1">
-          {items.length > 0 ? (
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-              {(() => {
-                const item = items[currentStepIndex];
-                const index = currentStepIndex;
-                if (!item) return null;
-                return (
-                  <div key={item.id}>
-                    <div className="bg-gray-50 dark:bg-gray-800/80 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">  
-                      <div className="flex items-center space-x-3">
-                        <span className="font-medium text-gray-700 dark:text-gray-300">
-                          Tahap {index + 1}: {
-                            item.tipe_item === 'MATERI' ? 'Materi Teks' :
-                            item.tipe_item === 'PDF' ? 'Dokumen PDF' :
-                            item.tipe_item === 'YOUTUBE' ? 'Video YouTube' :
-                            item.tipe_item === 'KUIS' ? 'Kuis/Soal' : 'Tugas Upload'
-                          }
-                        </span>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <button onClick={() => handleRemoveItem(index)} className="text-red-500 hover:text-red-700 p-1" title="Hapus Tahapan">
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="p-4 space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Judul Tahapan *</label>
-                        <input
-                          type="text"
-                          value={item.judul_item}
-                          onChange={(e) => handleItemChange(index, 'judul_item', e.target.value)}
-                          className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                          placeholder="Contoh: Bacaan Bab 1"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Instruksi / Penjelasan</label>
-                        <div className="bg-white dark:bg-gray-700 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
-                          <ReactQuill
-                            theme="snow"
-                            value={item.deskripsi || ''}
-                            onChange={(content) => handleItemChange(index, 'deskripsi', content)}
-                            modules={quizQuillModules}
-                            formats={quizQuillFormats}
-                            placeholder="Berikan instruksi apa yang harus dilakukan siswa pada tahap ini..."
-                            className="min-h-[100px]"
-                          />
-                        </div>
-                      </div>
-
-                {/* Feedback & Pertanyaan Settings */}
-                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800/50 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-900 dark:text-white">Wajibkan Feedback</h4>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Siswa harus mengisi feedback setelah menyelesaikan tahap ini</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        className="sr-only peer"
-                        checked={item.wajib_feedback !== false} // Default true
-                        onChange={(e) => handleItemChange(index, 'wajib_feedback', e.target.checked)}
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-                    </label>
-                  </div>
-
-                  <div className="pt-2 border-t border-blue-100 dark:border-blue-800/50">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Pertanyaan Khusus (Opsional)</label>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Tambahkan pertanyaan yang wajib dijawab siswa pada tahap ini.</p>
-                    <input
-                      type="text"
-                      value={item.pertanyaan_feedback || ''}
-                      onChange={(e) => handleItemChange(index, 'pertanyaan_feedback', e.target.value)}
-                      className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                      placeholder="Contoh: Apa kesimpulan Anda dari materi ini?"
-                    />
-                  </div>
-                </div>
-  
-                {/* Dynamic Content Field based on Type */}
-                {item.tipe_item === 'MATERI' && (
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Isi Materi</label>
-                    <div className="bg-white dark:bg-gray-700 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
-                      <ReactQuill
-                        theme="snow"
-                        value={item.konten || ''}
-                        onChange={(content, delta, source) => {
-                          if (content === item.konten) return;
-                          if (source === 'user') {
-                            handleItemChange(index, 'konten', content);
-                          } else {
-                            setTimeout(() => handleItemChange(index, 'konten', content), 0);
-                          }
-                        }}
-                        modules={quillModules}
-                        formats={quillFormats}
-                        placeholder="Tuliskan materi pembelajaran di sini..."
-                        className="min-h-[200px]"
-                      />
-                    </div>
-                  </div>
-                )}
-  
-                {item.tipe_item === 'PDF' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Link URL PDF</label>
-                    <input
-                      type="url"
-                      value={item.konten || ''}
-                      onChange={(e) => handleItemChange(index, 'konten', e.target.value)}
-                      className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                      placeholder="https://contoh.com/dokumen.pdf"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Masukkan link langsung ke file PDF (Google Drive, dll).</p>
-                  </div>
-                )}
-  
-                {item.tipe_item === 'YOUTUBE' && (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Link Video YouTube</label>
-                      <input
-                        type="url"
-                        value={item.konten || ''}
-                        onChange={(e) => handleItemChange(index, 'konten', e.target.value)}
-                        className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                        placeholder="https://www.youtube.com/watch?v=..."
-                      />
-                    </div>
-  
-                    <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                      <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
-                            <Youtube className="w-6 h-6 text-red-600 dark:text-red-400" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">Cari Video Manual</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Buka YouTube untuk mencari video yang sesuai</p>
-                          </div>
-                        </div>
-                        <a
-                          href="https://www.youtube.com"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                        >
-                          <ExternalLink className="w-4 h-4 mr-2" />
-                          Buka YouTube
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                )}
-  
-                {item.tipe_item === 'KUIS' && (
-                  <div className="space-y-4">
-                    <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800 mb-4">
-                      <p className="text-sm text-blue-800 dark:text-blue-200">
-                        Tambahkan soal pilihan ganda untuk pre-test atau post-test.
-                      </p>
-                    </div>
-                    
-                    {(() => {
-                      let questions: KuisSoal[] = [];
-                      try {
-                        questions = item.konten ? JSON.parse(item.konten) : [];
-                      } catch (e) {
-                        questions = [];
-                      }
-  
-                      const updateQuestion = (qIndex: number, field: keyof KuisSoal, value: any) => {
-                        const newQuestions = [...questions];
-                        newQuestions[qIndex] = { ...newQuestions[qIndex], [field]: value };
-                        handleItemChange(index, 'konten', JSON.stringify(newQuestions));
-                      };
-  
-                      const removeQuestion = (qIndex: number) => {
-                        const newQuestions = [...questions];
-                        newQuestions.splice(qIndex, 1);
-                        handleItemChange(index, 'konten', JSON.stringify(newQuestions));
-                      };
-  
-                      const addQuestion = () => {
-                        const newQuestions = [...questions, {
-                          pertanyaan: '',
-                          opsi_a: '',
-                          opsi_b: '',
-                          opsi_c: '',
-                          opsi_d: '',
-                          kunci_jawaban: 'A',
-                          bobot_nilai: 10
-                        }];
-                        handleItemChange(index, 'konten', JSON.stringify(newQuestions));
-                      };
-  
-                      const handleQuestionImageUpload = (qIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          if (file.size > 500000) {
-                            toast.error('Ukuran gambar maksimal 500KB');
-                            return;
-                          }
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            updateQuestion(qIndex, 'gambar', reader.result as string);
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      };
-  
-                      return (
-                        <div className="space-y-6">
-                          {questions.map((q, qIndex) => (
-                            <div key={qIndex} className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg border border-gray-200 dark:border-gray-700 relative">
-                              <button 
-                                onClick={() => removeQuestion(qIndex)}
-                                className="absolute top-4 right-4 text-red-500 hover:text-red-700 z-10"
-                                title="Hapus Soal"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                              <div className="space-y-4 pr-8">
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Soal {qIndex + 1}</label>
-                                  <div className="bg-white dark:bg-gray-700 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 mb-3">
-                                    <ReactQuill
-                                      theme="snow"
-                                      value={q.pertanyaan || ''}
-                                      onChange={(content, delta, source) => {
-                                        if (content === q.pertanyaan) return;
-                                        if (source === 'user') {
-                                          updateQuestion(qIndex, 'pertanyaan', content);
-                                        } else {
-                                          setTimeout(() => updateQuestion(qIndex, 'pertanyaan', content), 0);
-                                        }
-                                      }}
-                                      modules={quizQuillModules}
-                                      formats={quizQuillFormats}
-                                      placeholder="Tulis pertanyaan..."
-                                      className="min-h-[100px]"
-                                    />
-                                  </div>
-  
-                                  {/* Question Image */}
-                                  <div className="mt-2">
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">Gambar Soal (Opsional, Maks 500KB)</label>
-                                    {q.gambar ? (
-                                      <div className="relative inline-block">
-                                        <img src={q.gambar} alt="Soal" className="h-32 rounded-md border border-gray-200 dark:border-gray-700" />
-                                        <button 
-                                          onClick={() => updateQuestion(qIndex, 'gambar', '')}
-                                          className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full shadow-sm"
-                                        >
-                                          <X className="w-3 h-3" />
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <label className="flex items-center space-x-2 px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors w-fit">
-                                        <ImageIcon className="w-4 h-4 text-gray-400" />
-                                        <span className="text-xs text-gray-600 dark:text-gray-300">Upload Gambar</span>
-                                        <input 
-                                          type="file" 
-                                          accept="image/png, image/jpeg" 
-                                          className="hidden" 
-                                          onChange={(e) => handleQuestionImageUpload(qIndex, e)}
-                                        />
-                                      </label>
-                                    )}
-                                  </div>
-                                </div>
-  
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  {['a', 'b', 'c', 'd'].map((opt) => (
-                                    <div key={opt}>
-                                      <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Opsi {opt}</label>
-                                      <input 
-                                        type="text" 
-                                        value={(q as any)[`opsi_${opt}`] || ''} 
-                                        onChange={(e) => updateQuestion(qIndex, `opsi_${opt}` as any, e.target.value)} 
-                                        className="w-full px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm outline-none" 
-                                      />
-                                    </div>
-                                  ))}
-                                </div>
-  
-                                <div className="flex flex-wrap items-center gap-6 pt-2">
-                                  <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-2">Kunci Jawaban</label>
-                                    <div className="flex items-center space-x-4">
-                                      {['A', 'B', 'C', 'D'].map((key) => (
-                                        <label key={key} className="flex items-center space-x-1.5 cursor-pointer">
-                                          <input 
-                                            type="radio" 
-                                            name={`kunci_${qIndex}`}
-                                            value={key}
-                                            checked={q.kunci_jawaban === key}
-                                            onChange={() => updateQuestion(qIndex, 'kunci_jawaban', key)}
-                                            className="text-blue-600 focus:ring-blue-500"
-                                          />
-                                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{key}</span>
-                                        </label>
-                                      ))}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">Bobot Nilai</label>
-                                    <input 
-                                      type="number" 
-                                      value={q.bobot_nilai} 
-                                      onChange={(e) => updateQuestion(qIndex, 'bobot_nilai', Number(e.target.value))}
-                                      className="w-24 px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm outline-none" 
-                                      min="1"
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                          <button 
-                            onClick={addQuestion}
-                            className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center"
-                          >
-                            <Plus className="w-4 h-4 mr-1" /> Tambah Soal
-                          </button>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
-  
-                {item.tipe_item === 'TUGAS' && (() => {
-                  let config = { allow_link: true, allow_file: false, allowed_extensions: [] as string[] };
-                  try {
-                    if (item.konten) {
-                      const parsed = JSON.parse(item.konten);
-                      config = { ...config, ...parsed };
-                    }
-                  } catch (e) {
-                    // Ignore
-                  }
-  
-                  const updateConfig = (field: string, value: any) => {
-                    const newConfig = { ...config, [field]: value };
-                    handleItemChange(index, 'konten', JSON.stringify(newConfig));
-                  };
-  
-                  const toggleExtension = (ext: string) => {
-                    const exts = config.allowed_extensions || [];
-                    if (exts.includes(ext)) {
-                      updateConfig('allowed_extensions', exts.filter(e => e !== ext));
-                    } else {
-                      updateConfig('allowed_extensions', [...exts, ext]);
-                    }
-                  };
-  
-                  return (
-                    <div className="space-y-4">
-                      <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-                        <p className="text-sm text-blue-800 dark:text-blue-200 mb-4">
-                          Atur jenis pengumpulan tugas yang diizinkan untuk siswa.
-                        </p>
-                        
-                        <div className="space-y-3">
-                          {!config.allow_link && !config.allow_file && (
-                            <div className="p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-xs text-red-600 dark:text-red-400 mb-2">
-                              Peringatan: Anda harus mengizinkan setidaknya satu jenis pengumpulan (Link atau File).
-                            </div>
-                          )}
-                          <label className="flex items-center space-x-3 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={config.allow_link}
-                              onChange={(e) => updateConfig('allow_link', e.target.checked)}
-                              className="rounded text-blue-600 focus:ring-blue-500"
-                            />
-                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Izinkan Pengumpulan Link (URL)</span>
-                          </label>
-  
-                          <div>
-                            <label className="flex items-center space-x-3 cursor-pointer mb-2">
-                              <input
-                                type="checkbox"
-                                checked={config.allow_file}
-                                onChange={(e) => updateConfig('allow_file', e.target.checked)}
-                                className="rounded text-blue-600 focus:ring-blue-500"
-                              />
-                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Izinkan Upload File</span>
-                            </label>
-                            
-                            {config.allow_file && (
-                              <div className="ml-7 mt-2 p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Pilih format file yang diizinkan:</p>
-                                <div className="flex flex-wrap gap-3">
-                                  {['pdf', 'doc,docx', 'xls,xlsx', 'ppt,pptx', 'jpg,jpeg,png', 'zip,rar'].map(ext => (
-                                    <label key={ext} className="flex items-center space-x-2 cursor-pointer">
-                                      <input
-                                        type="checkbox"
-                                        checked={(config.allowed_extensions || []).includes(ext)}
-                                        onChange={() => toggleExtension(ext)}
-                                        className="rounded text-blue-600 focus:ring-blue-500"
-                                      />
-                                      <span className="text-xs text-gray-700 dark:text-gray-300 uppercase">{ext.replace(/,/g, '/')}</span>
-                                    </label>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
+        <div className="lg:col-span-8">
+          {items.length > 0 && currentStepIndex < items.length ? (
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+              <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-100 dark:border-gray-700">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Editor Tahapan {currentStepIndex + 1}
+                </h3>
+                <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs font-medium rounded-full">
+                  {items[currentStepIndex].tipe_item}
+                </span>
               </div>
               
-              {/* Slide Navigation Footer */}
-              <div className="bg-gray-50 dark:bg-gray-800/80 px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                      <button
-                        onClick={() => setCurrentStepIndex(Math.max(0, currentStepIndex - 1))}
-                        disabled={currentStepIndex === 0}
-                        className="flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        <ChevronLeft className="w-4 h-4 mr-1" /> Sebelumnya
-                      </button>
-                      <span className="text-sm text-gray-500 dark:text-gray-400">
-                        {currentStepIndex + 1} / {items.length}
-                      </span>
-                      <button
-                        onClick={() => setCurrentStepIndex(Math.min(items.length - 1, currentStepIndex + 1))}
-                        disabled={currentStepIndex === items.length - 1}
-                        className="flex items-center px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        Selanjutnya <ChevronRight className="w-4 h-4 ml-1" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })()}
+              <ModulItemEditor 
+                item={items[currentStepIndex]} 
+                index={currentStepIndex} 
+                handleItemChange={handleItemChange} 
+              />
             </div>
           ) : (
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
-              <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Belum ada tahapan belajar</h3>
-              <p className="text-gray-500 dark:text-gray-400">Pilih jenis tahapan di menu samping untuk mulai menambahkan materi.</p>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-12 flex flex-col items-center justify-center text-center h-full min-h-[400px]">
+              <div className="w-16 h-16 bg-gray-50 dark:bg-gray-900 rounded-full flex items-center justify-center mb-4">
+                <Plus className="w-8 h-8 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Belum Ada Tahapan Dipilih</h3>
+              <p className="text-gray-500 dark:text-gray-400 max-w-sm">
+                Pilih tahapan dari daftar di sebelah kiri atau tambahkan tahapan baru untuk mulai mengedit konten.
+              </p>
             </div>
           )}
         </div>
       </div>
 
-      <div className={`fixed bottom-0 left-0 right-0 ${isSidebarOpen ? 'md:left-64' : 'left-0'} bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 flex justify-end items-center space-x-4 z-10 transition-all duration-300 ease-in-out`}>
-        {isEditing && (
-          <button
-            onClick={() => navigate(`/siswa/modul/${id}`)}
-            className="px-4 py-2 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 font-medium rounded-lg transition-colors flex items-center"
-          >
-            <Eye className="w-5 h-5 mr-2" />
-            Pratinjau
-          </button>
-        )}
-        <button
-          onClick={() => handleSave(false)}
-          disabled={loading}
-          className="px-6 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
-        >
-          Simpan Draft
-        </button>
-        <button
-          onClick={() => handleSave(true)}
-          disabled={loading}
-          className="px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center disabled:opacity-50"
-        >
-          <Save className="w-5 h-5 mr-2" />
-          Publikasikan Modul
-        </button>
+      <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 z-40 md:left-64 transition-all duration-300">
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
+          <div className="text-sm text-gray-500 dark:text-gray-400 hidden sm:block">
+            {items.length} Tahapan • {isEditing ? 'Mengedit Modul' : 'Modul Baru'}
+          </div>
+          <div className="flex space-x-3 w-full sm:w-auto">
+            <button
+              onClick={() => handleSave(false)}
+              disabled={loading}
+              className="flex-1 sm:flex-none px-6 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+            >
+              Simpan Draft
+            </button>
+            <button
+              onClick={() => handleSave(true)}
+              disabled={loading}
+              className="flex-1 sm:flex-none flex items-center justify-center px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              {loading ? (
+                <span className="flex items-center">
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Menyimpan...
+                </span>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  {isEditing ? 'Perbarui & Publish' : 'Publish Modul'}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
       </div>
 
-      <AnimatePresence>
-        {showPublishSuccess && (
-          <motion.div
-            key="publish-success-toast"
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="fixed inset-0 flex items-center justify-center pointer-events-none z-[9999]"
-          >
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-6 flex flex-col items-center space-y-4 min-w-[300px]">
-              <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
-                <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
-              </div>
-              <p className="text-gray-900 dark:text-white font-medium text-lg text-center">
-                <span>Modul Berhasil Dipublikasi!</span>
-              </p>
+      {showPublishSuccess && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl">
+            <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+              <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Modul Berhasil Dipublish!</h3>
+            <p className="text-gray-500 dark:text-gray-400 mb-6">
+              Modul Anda sekarang dapat diakses oleh siswa sesuai dengan target yang telah ditentukan.
+            </p>
+            <p className="text-sm text-gray-400 dark:text-gray-500">
+              Mengalihkan ke halaman daftar modul...
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

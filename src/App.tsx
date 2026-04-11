@@ -15,6 +15,7 @@ import ModulList from './pages/guru/Modul';
 import ModulForm from './pages/guru/ModulForm';
 import ModulMonitoring from './pages/guru/ModulMonitoring';
 import ModulKursus from './pages/guru/ModulKursus';
+import ModulKolaborasi from './pages/guru/ModulKolaborasi';
 import Penilaian from './pages/guru/Penilaian';
 import PenilaianSiswa from './pages/guru/PenilaianSiswa';
 import PenilaianDetail from './pages/guru/PenilaianDetail';
@@ -118,6 +119,11 @@ export default function App() {
               <Route path="guru/modul/:id/monitoring" element={
                 <ProtectedRoute allowedRoles={['GURU']}>
                   <ModulMonitoring />
+                </ProtectedRoute>
+              } />
+              <Route path="guru/kolaborasi" element={
+                <ProtectedRoute allowedRoles={['GURU']}>
+                  <ModulKolaborasi />
                 </ProtectedRoute>
               } />
               <Route path="guru/kursus" element={

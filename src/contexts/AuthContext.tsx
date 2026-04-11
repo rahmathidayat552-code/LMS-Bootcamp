@@ -61,8 +61,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     setPersistence(auth, browserLocalPersistence).catch(console.error);
-    console.log("AuthContext initialized. Current URL:", window.location.href);
-    console.log("Is Iframe:", window.self !== window.top);
 
     // Handle redirect result for Google Login
     const redirectPromise = getRedirectResult(auth).catch((error: any) => {

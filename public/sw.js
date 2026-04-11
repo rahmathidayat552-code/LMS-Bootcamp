@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lms-smkn9-v2'; // Updated cache version
+const CACHE_NAME = 'lms-smkn9-v3'; // Updated cache version
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -33,7 +33,12 @@ self.addEventListener('fetch', (event) => {
   if (event.request.mode === 'navigate' || event.request.url.includes('/index.html')) {
     event.respondWith(
       fetch(event.request).catch(() => {
-        return caches.match('/index.html');
+        return caches.match('/index.html').then((cachedResponse) => {
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          return new Response('Offline and not in cache', { status: 503, statusText: 'Service Unavailable' });
+        });
       })
     );
     return;
@@ -46,7 +51,8 @@ self.addEventListener('fetch', (event) => {
       if (
         event.request.method !== 'GET' || 
         event.request.url.includes('firebasestorage.googleapis.com') ||
-        event.request.url.includes('firestore.googleapis.com')
+        event.request.url.includes('firestore.googleapis.com') ||
+        event.request.url.includes('identitytoolkit.googleapis.com')
       ) {
         return networkResponse;
       }
@@ -63,7 +69,12 @@ self.addEventListener('fetch', (event) => {
     }).catch((error) => {
       console.warn('Fetch failed, falling back to cache:', error);
       // Fallback to cache if network fails
-      return caches.match(event.request);
+      return caches.match(event.request).then((cachedResponse) => {
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        return new Response('Offline and not in cache', { status: 503, statusText: 'Service Unavailable' });
+      });
     })
   );
 });
