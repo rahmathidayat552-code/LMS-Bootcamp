@@ -7,12 +7,14 @@ import { doc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '../firebase';
 import { toast } from 'sonner';
-import { KeyRound, Monitor, Moon, Sun, Palette, Image as ImageIcon, Upload, Loader2, X } from 'lucide-react';
+import { KeyRound, Monitor, Moon, Sun, Palette, Image as ImageIcon, Upload, Loader2, X, Bell } from 'lucide-react';
+import { useNotifications } from '../contexts/NotificationContext';
 
 export default function Settings() {
   const { user, profile } = useAuth();
   const { theme, setTheme } = useTheme();
   const { settings } = useSettings();
+  const { permission, requestPermission } = useNotifications();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -287,6 +289,33 @@ export default function Settings() {
                 <span className="text-sm font-medium">Sistem</span>
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Notification Settings */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden md:col-span-2">
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center space-x-3">
+            <Bell className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Notifikasi</h2>
+          </div>
+          <div className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-gray-900 dark:text-white">Izin Notifikasi Browser</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Terima notifikasi langsung di browser Anda saat ada pembaruan penting.
+              </p>
+            </div>
+            <button
+              onClick={requestPermission}
+              disabled={permission === 'granted'}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                permission === 'granted'
+                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 cursor-not-allowed'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
+              }`}
+            >
+              {permission === 'granted' ? 'Diizinkan' : permission === 'denied' ? 'Ditolak (Ubah di Browser)' : 'Minta Izin'}
+            </button>
           </div>
         </div>
 

@@ -205,6 +205,16 @@ service cloud.firestore {
              (!('updated_at' in data) || data.updated_at == null || data.updated_at is timestamp);
     }
 
+    function isValidNotification(data) {
+      return hasRequiredFields(['user_id', 'title', 'message', 'is_read', 'created_at']) &&
+             data.user_id is string && data.user_id.size() > 0 &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.message is string && data.message.size() > 0 && data.message.size() < 1000 &&
+             data.is_read is bool &&
+             (!('link' in data) || data.link == null || (data.link is string && data.link.size() < 500)) &&
+             data.created_at is timestamp;
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -248,8 +258,9 @@ service cloud.firestore {
 
     match /modul_items/{itemId} {
       allow read: if isAuthenticated();
-      allow create: if (isAdmin() || isGuru()) && isValidModulItem(request.resource.data);
-      allow update, delete: if isAdmin() || isGuru(); // Simplification: Guru can edit their items (should check modul ownership in real app)
+      allow create: if (isAdmin() || (isGuru() && get(/databases/$(database)/documents/moduls/$(request.resource.data.modul_id)).data.guru_id == request.auth.uid)) && isValidModulItem(request.resource.data);
+      allow update: if (isAdmin() || (isGuru() && get(/databases/$(database)/documents/moduls/$(resource.data.modul_id)).data.guru_id == request.auth.uid && (!('modul_id' in request.resource.data) || request.resource.data.modul_id == resource.data.modul_id))) && isValidModulItem(request.resource.data);
+      allow delete: if isAdmin() || (isGuru() && get(/databases/$(database)/documents/moduls/$(resource.data.modul_id)).data.guru_id == request.auth.uid);
     }
 
     match /kuis_soal/{soalId} {
@@ -288,8 +299,8 @@ service cloud.firestore {
 
     match /notifications/{notificationId} {
       allow read: if isAuthenticated() && resource.data.user_id == request.auth.uid;
-      allow create: if isAuthenticated() && (isGuru() || isAdmin());
-      allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+      allow create: if isAuthenticated() && (isGuru() || isAdmin()) && isValidNotification(request.resource.data);
+      allow update: if isAuthenticated() && resource.data.user_id == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_read']);
       allow delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
     }
   }

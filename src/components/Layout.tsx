@@ -44,13 +44,6 @@ export default function Layout() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  useEffect(() => {
-    // Request notification permission when layout mounts if not already granted/denied
-    if ('Notification' in window && Notification.permission === 'default') {
-      requestPermission();
-    }
-  }, [requestPermission]);
-
   const isDarkMode = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   const toggleTheme = () => {

@@ -3,6 +3,7 @@ import { collection, query, where, onSnapshot, updateDoc, doc, orderBy } from 'f
 import { db } from '../firebase';
 import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 interface Notification {
   id: string;
@@ -20,6 +21,7 @@ interface NotificationContextType {
   markAsRead: (id: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   requestPermission: () => Promise<void>;
+  permission: NotificationPermission;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -28,6 +30,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const { profile } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [permission, setPermission] = useState<NotificationPermission>('default');
+  const navigate = useNavigate();
 
   useEffect(() => {
     if ('Notification' in window) {
@@ -90,7 +93,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                 description: notif.message,
                 action: notif.link ? {
                   label: 'Lihat',
-                  onClick: () => window.location.href = notif.link!
+                  onClick: () => navigate(notif.link!)
                 } : undefined
               });
             }
@@ -107,7 +110,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     });
 
     return () => unsubscribe();
-  }, [profile, permission]);
+  }, [profile, permission, navigate]);
 
   const markAsRead = async (id: string) => {
     try {
@@ -133,7 +136,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
   return (
-    <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, requestPermission }}>
+    <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, requestPermission, permission }}>
       {children}
     </NotificationContext.Provider>
   );

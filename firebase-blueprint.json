@@ -105,6 +105,20 @@
         "created_at": { "type": "string", "format": "date-time" }
       },
       "required": ["user_id", "nama_siswa", "kelas_id", "aksi"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Represents a notification for a user",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "link": { "type": "string" },
+        "is_read": { "type": "boolean" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["user_id", "title", "message", "is_read", "created_at"]
     }
   },
   "firestore": {
@@ -135,6 +149,10 @@
     "activity_logs/{logId}": {
       "schema": { "$ref": "#/entities/ActivityLog" },
       "description": "Stores student activity logs"
+    },
+    "notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Stores user notifications"
     }
   }
 }

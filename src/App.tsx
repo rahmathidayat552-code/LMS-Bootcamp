@@ -57,11 +57,11 @@ export default function App() {
       <ThemeProvider>
         <SettingsProvider>
           <AuthProvider>
-            <NotificationProvider>
-              <Toaster position="top-right" richColors />
-              <Router>
-            <Routes>
-            <Route path="/login" element={<Login />} />
+            <Router>
+              <NotificationProvider>
+                <Toaster position="top-right" richColors />
+                <Routes>
+                  <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             
@@ -176,9 +176,9 @@ export default function App() {
               } />
             </Route>
           </Routes>
-        </Router>
-        </NotificationProvider>
-        </AuthProvider>
+              </NotificationProvider>
+            </Router>
+          </AuthProvider>
         </SettingsProvider>
       </ThemeProvider>
     </ErrorBoundary>
