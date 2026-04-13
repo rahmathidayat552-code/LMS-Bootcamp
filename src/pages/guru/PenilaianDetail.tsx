@@ -173,6 +173,9 @@ export default function PenilaianDetail() {
             created_at: serverTimestamp()
           });
         }
+        
+        // Redirect back to the grading list
+        navigate(`/guru/penilaian/${modulId}`);
       } else {
         toast.info('Tidak ada perubahan untuk disimpan');
       }
@@ -197,8 +200,31 @@ export default function PenilaianDetail() {
   const k2Items = items.filter(i => i.tipe_item === 'KUIS');
   const k3Items = items.filter(i => i.tipe_item === 'TUGAS');
 
-  const progressList = Object.values(progress);
-  const gradeResult = calculateGrade(items, progressList, bobot);
+  // Create a preview progress list that merges saved progress with current manual inputs
+  const previewProgressList = items.map(item => {
+    const p = progress[item.id] || { modul_item_id: item.id, status_selesai: false };
+    const inputVal = inputNilai[item.id];
+    
+    let previewNilai = p.nilai;
+    let previewStatus = p.status_selesai;
+
+    if (inputVal !== undefined && inputVal !== '') {
+      const num = Number(inputVal);
+      if (!isNaN(num) && num >= 0 && num <= 100) {
+        previewNilai = num;
+        previewStatus = true; // Consider it completed if manually graded
+      }
+    }
+
+    return {
+      ...p,
+      modul_item_id: item.id,
+      nilai: previewNilai,
+      status_selesai: previewStatus
+    };
+  });
+
+  const gradeResult = calculateGrade(items, previewProgressList, bobot);
 
   // Normalize weights for UI display
   let w1 = k1Items.length > 0 ? bobot.k1 : 0;
@@ -215,8 +241,16 @@ export default function PenilaianDetail() {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="max-w-4xl mx-auto space-y-6 pb-20"
+      className="max-w-4xl mx-auto space-y-6 pb-20 relative"
     >
+      {/* Floating Top Grade */}
+      <div className="fixed top-20 md:top-24 right-4 md:right-8 z-40 bg-gray-900 dark:bg-white text-white dark:text-gray-900 px-5 py-3 rounded-2xl shadow-xl border border-gray-700 dark:border-gray-200 flex flex-col items-end transition-all">
+        <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Nilai Akhir</span>
+        <span className="text-2xl font-bold">
+          {gradeResult.finalGrade !== null ? gradeResult.finalGrade.toFixed(2) : '-'}
+        </span>
+      </div>
+
       {/* Breadcrumb */}
       <nav className="flex text-sm text-gray-500 dark:text-gray-400">
         <ol className="flex items-center space-x-2">
@@ -609,7 +643,14 @@ export default function PenilaianDetail() {
 
       {/* Global Save Button */}
       <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 shadow-lg z-10">
-        <div className="max-w-7xl mx-auto flex justify-end">
+        <div className="max-w-7xl mx-auto flex justify-end gap-3">
+          <button
+            onClick={() => navigate(`/guru/penilaian/${modulId}`)}
+            className="flex items-center justify-center px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors w-full md:w-auto font-medium shadow-sm"
+          >
+            <ChevronLeft className="w-5 h-5 mr-2" />
+            Kembali
+          </button>
           <button
             onClick={handleSaveSemuaNilai}
             disabled={isSavingAll}
