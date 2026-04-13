@@ -247,17 +247,20 @@ export function useModulForm(id: string | undefined) {
         batch.update(modulRef, modulData);
       }
 
+      let oldItemIds: string[] = [];
       if (isEditing) {
         const oldItemsQuery = query(collection(db, 'modul_items'), where('modul_id', '==', id));
         const oldItemsSnapshot = await getDocs(oldItemsQuery);
-        oldItemsSnapshot.docs.forEach(doc => {
-          batch.delete(doc.ref);
-        });
+        oldItemIds = oldItemsSnapshot.docs.map(doc => doc.id);
       }
 
       items.forEach((item, index) => {
-        const itemRef = doc(collection(db, 'modul_items'));
-        batch.set(itemRef, {
+        const isNewItem = !item.id || item.id.startsWith('temp_');
+        const itemRef = isNewItem 
+          ? doc(collection(db, 'modul_items')) 
+          : doc(db, 'modul_items', item.id);
+
+        const itemData: any = {
           modul_id: modulRef.id,
           tipe_item: item.tipe_item,
           judul_item: item.judul_item,
@@ -266,8 +269,21 @@ export function useModulForm(id: string | undefined) {
           urutan: index + 1,
           wajib_feedback: item.wajib_feedback ?? false,
           pertanyaan_feedback: item.pertanyaan_feedback || '',
-          created_at: new Date().toISOString()
-        });
+          updated_at: new Date().toISOString()
+        };
+
+        if (isNewItem) {
+          itemData.created_at = new Date().toISOString();
+          batch.set(itemRef, itemData);
+        } else {
+          batch.update(itemRef, itemData);
+          oldItemIds = oldItemIds.filter(oldId => oldId !== item.id);
+        }
+      });
+
+      // Delete items that were removed by the user
+      oldItemIds.forEach(oldId => {
+        batch.delete(doc(db, 'modul_items', oldId));
       });
 
       await batch.commit();

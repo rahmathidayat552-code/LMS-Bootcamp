@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, getDoc, doc, onSnapshot, updateDoc, serverTimestamp, addDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, getDoc, doc, onSnapshot, updateDoc, serverTimestamp, addDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, Loader2, ExternalLink, Save, CheckCircle, XCircle } from 'lucide-react';
@@ -101,56 +101,86 @@ export default function PenilaianDetail() {
     fetchData();
   }, [modulId, siswaId, navigate]);
 
-  const handleSaveNilai = async (itemId: string, progressId: string) => {
-    const nilaiStr = inputNilai[itemId];
-    const catatanStr = inputCatatan[itemId] || '';
-    
-    if (!nilaiStr || nilaiStr.trim() === '') {
-      toast.error('Masukkan nilai terlebih dahulu');
-      return;
-    }
-    
-    const nilaiNum = Number(nilaiStr);
-    if (isNaN(nilaiNum) || nilaiNum < 0 || nilaiNum > 100) {
-      toast.error('Nilai harus berupa angka antara 0 - 100');
-      return;
-    }
+  const [isSavingAll, setIsSavingAll] = useState(false);
 
-    setSaving(prev => ({ ...prev, [itemId]: true }));
+  const handleSaveSemuaNilai = async () => {
+    setIsSavingAll(true);
     try {
-      if (progressId) {
-        await updateDoc(doc(db, 'progres_siswa', progressId), {
-          nilai: nilaiNum,
-          catatan_guru: catatanStr,
-          dinilai_pada: serverTimestamp()
-        });
-        toast.success('Nilai dan catatan berhasil disimpan');
+      const batch = writeBatch(db);
+      let hasChanges = false;
 
-        // Create notification for student
-        const item = items.find(i => i.id === itemId);
-        if (item && siswaId) {
-          let message = `Guru telah memberikan nilai untuk "${item.judul_item}" pada modul ${modul?.judul_modul || ''}.`;
-          if (catatanStr.trim() !== '') {
-            message += ` Ada catatan baru dari guru.`;
+      for (const item of items) {
+        const nilaiStr = inputNilai[item.id];
+        const catatanStr = inputCatatan[item.id];
+        
+        // Only process if there's an input value or a note
+        if (nilaiStr !== undefined || catatanStr !== undefined) {
+          const p = progress[item.id];
+          const progressId = p?.id;
+          
+          let nilaiNum: number | null = null;
+          if (nilaiStr !== undefined && nilaiStr !== '') {
+            nilaiNum = Number(nilaiStr);
+            if (isNaN(nilaiNum) || nilaiNum < 0 || nilaiNum > 100) {
+              toast.error(`Nilai untuk "${item.judul_item}" harus antara 0 - 100`);
+              setIsSavingAll(false);
+              return;
+            }
           }
+
+          if (progressId) {
+            const updateData: any = {
+              dinilai_pada: serverTimestamp()
+            };
+            if (nilaiNum !== null) updateData.nilai = nilaiNum;
+            if (catatanStr !== undefined) updateData.catatan_guru = catatanStr;
+            
+            batch.update(doc(db, 'progres_siswa', progressId), updateData);
+            hasChanges = true;
+          } else {
+            // Create new progress if it doesn't exist (e.g. teacher grades an unstarted item)
+            const newProgressRef = doc(collection(db, 'progres_siswa'));
+            const newData: any = {
+              siswa_id: siswaId,
+              modul_id: modulId,
+              modul_item_id: item.id,
+              status_selesai: true, // Mark as done if graded
+              dinilai_pada: serverTimestamp(),
+              created_at: serverTimestamp(),
+              updated_at: serverTimestamp()
+            };
+            if (nilaiNum !== null) newData.nilai = nilaiNum;
+            if (catatanStr !== undefined) newData.catatan_guru = catatanStr;
+            
+            batch.set(newProgressRef, newData);
+            hasChanges = true;
+          }
+        }
+      }
+
+      if (hasChanges) {
+        await batch.commit();
+        toast.success('Semua nilai dan catatan berhasil disimpan');
+        
+        // Create a single notification for the student
+        if (siswaId) {
           await addDoc(collection(db, 'notifications'), {
             user_id: siswaId,
             title: 'Nilai Diperbarui',
-            message: message,
+            message: `Guru telah memperbarui nilai untuk modul ${modul?.judul_modul || ''}.`,
             link: `/siswa/modul/${modulId}`,
             is_read: false,
             created_at: serverTimestamp()
           });
         }
-
       } else {
-        toast.error('Data progres tidak ditemukan');
+        toast.info('Tidak ada perubahan untuk disimpan');
       }
     } catch (error) {
-      console.error('Error saving nilai:', error);
-      toast.error('Gagal menyimpan nilai');
+      console.error("Error saving all grades:", error);
+      toast.error('Terjadi kesalahan saat menyimpan nilai');
     } finally {
-      setSaving(prev => ({ ...prev, [itemId]: false }));
+      setIsSavingAll(false);
     }
   };
 
@@ -228,67 +258,92 @@ export default function PenilaianDetail() {
             <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex justify-between items-center">
               <div>
                 <h3 className="font-bold text-gray-900 dark:text-white">KONTEN 1 — Materi Pembelajaran</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">* dinilai otomatis (selesai = 100, belum = 0)</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">* dinilai otomatis (selesai = 100, belum = 0), bisa diubah manual</p>
               </div>
               <div className="text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-3 py-1 rounded-full">
                 Bobot: {Math.round(bobot.k1)}%
               </div>
             </div>
-            <div className="p-0">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
-                    <th className="px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Judul Item</th>
-                    <th className="px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Tipe</th>
-                    <th className="px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Status</th>
-                    <th className="px-4 py-3 font-medium text-gray-500 dark:text-gray-400 text-right">Nilai</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {k1Items.map(item => {
-                    const p = progress[item.id];
-                    const isDone = p?.status_selesai;
-                    return (
-                      <tr key={item.id}>
-                        <td className="px-4 py-3">
-                          <div className="text-gray-900 dark:text-white font-medium">{item.judul_item}</div>
-                          {(p?.jawaban?.jawaban || p?.feedback) && (
-                            <div className="mt-2 space-y-2 text-xs">
-                              {p?.jawaban?.jawaban && (
-                                <div className="bg-gray-100 dark:bg-gray-700/50 p-2 rounded">
-                                  <span className="font-semibold text-gray-700 dark:text-gray-300">Jawaban: </span>
-                                  <span className="text-gray-600 dark:text-gray-400">{p.jawaban.jawaban}</span>
-                                </div>
-                              )}
-                              {p?.feedback && (
-                                <div className="bg-gray-100 dark:bg-gray-700/50 p-2 rounded">
-                                  <span className="font-semibold text-gray-700 dark:text-gray-300">Feedback: </span>
-                                  <span className="text-gray-600 dark:text-gray-400">{p.feedback}</span>
-                                </div>
-                              )}
+            <div className="p-4 space-y-6">
+              {k1Items.map(item => {
+                const p = progress[item.id];
+                const isDone = p?.status_selesai;
+                const isGraded = p?.nilai !== undefined && p?.nilai !== null;
+                const displayNilai = isGraded ? p.nilai : (isDone ? 100 : 0);
+                
+                return (
+                  <div key={item.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-800/50">
+                    <div className="flex justify-between items-start mb-4">
+                      <h4 className="font-bold text-gray-900 dark:text-white">{item.judul_item} <span className="text-sm font-normal text-gray-500">({item.tipe_item})</span></h4>
+                      {isDone ? (
+                        <span className="inline-flex items-center text-xs text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded-full">
+                          <CheckCircle className="w-3 h-3 mr-1" /> Selesai
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-full">
+                          <XCircle className="w-3 h-3 mr-1" /> Belum
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-4">
+                        {item.pertanyaan_feedback && (
+                          <div>
+                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Jawaban Pertanyaan:</p>
+                            <div className="bg-white dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-300">
+                              {p?.jawaban?.jawaban || <span className="italic text-gray-400">Tidak ada jawaban</span>}
                             </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-gray-600 dark:text-gray-400 align-top">{item.tipe_item}</td>
-                        <td className="px-4 py-3 align-top">
-                          {isDone ? (
-                            <span className="inline-flex items-center text-green-600 dark:text-green-400">
-                              <CheckCircle className="w-4 h-4 mr-1" /> Selesai
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center text-gray-400">
-                              <XCircle className="w-4 h-4 mr-1" /> Belum
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white align-top">
-                          {isDone ? '100' : '0'}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </div>
+                        )}
+                        
+                        {item.wajib_feedback !== false && (
+                          <div>
+                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Feedback Siswa:</p>
+                            <div className="bg-white dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-300">
+                              {p?.feedback || <span className="italic text-gray-400">Tidak ada feedback</span>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Beri Nilai Manual (0 - 100)
+                        </label>
+                        <div className="flex flex-col space-y-3">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={inputNilai[item.id] || ''}
+                            onChange={(e) => setInputNilai(prev => ({ ...prev, [item.id]: e.target.value }))}
+                            className="w-full md:w-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            placeholder={String(displayNilai)}
+                          />
+                          
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                              Catatan Guru (Opsional)
+                            </label>
+                            <textarea
+                              value={inputCatatan[item.id] || ''}
+                              onChange={(e) => setInputCatatan(prev => ({ ...prev, [item.id]: e.target.value }))}
+                              rows={3}
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"
+                              placeholder="Berikan masukan atau catatan untuk siswa..."
+                            />
+                          </div>
+
+                        </div>
+                        <p className="mt-2 text-xs text-green-600 dark:text-green-400 flex items-center">
+                          <CheckCircle className="w-3 h-3 mr-1" /> Nilai saat ini: {displayNilai} {isGraded ? '(Manual)' : '(Otomatis)'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -299,64 +354,100 @@ export default function PenilaianDetail() {
             <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex justify-between items-center">
               <div>
                 <h3 className="font-bold text-gray-900 dark:text-white">KONTEN 2 — Kuis</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">** dinilai otomatis ((jawaban benar / total soal) × 100)</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">** dinilai otomatis, bisa diubah manual</p>
               </div>
               <div className="text-sm font-medium text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 px-3 py-1 rounded-full">
                 Bobot: {Math.round(w2)}%
               </div>
             </div>
-            <div className="p-0">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
-                    <th className="px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Judul Kuis</th>
-                    <th className="px-4 py-3 font-medium text-gray-500 dark:text-gray-400">Hasil</th>
-                    <th className="px-4 py-3 font-medium text-gray-500 dark:text-gray-400 text-right">Nilai</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {k2Items.map(item => {
-                    const p = progress[item.id];
-                    let totalSoal = 0;
-                    try {
-                      totalSoal = JSON.parse(item.konten || '[]').length;
-                    } catch (e) {}
-                    
-                    // Estimate correct answers from grade (assuming equal weight)
-                    const correct = p?.nilai ? Math.round((p.nilai / 100) * totalSoal) : 0;
+            <div className="p-4 space-y-6">
+              {k2Items.map(item => {
+                const p = progress[item.id];
+                let totalSoal = 0;
+                try {
+                  totalSoal = JSON.parse(item.konten || '[]').length;
+                } catch (e) {}
+                
+                const isDone = p?.status_selesai;
+                const isGraded = p?.nilai !== undefined && p?.nilai !== null;
+                const displayNilai = isGraded ? p.nilai : 0;
+                const correct = isGraded ? Math.round((p.nilai / 100) * totalSoal) : 0;
 
-                    return (
-                      <tr key={item.id}>
-                        <td className="px-4 py-3">
-                          <div className="text-gray-900 dark:text-white font-medium">{item.judul_item}</div>
-                          {(p?.jawaban?.jawaban || p?.feedback) && (
-                            <div className="mt-2 space-y-2 text-xs">
-                              {p?.jawaban?.jawaban && (
-                                <div className="bg-gray-100 dark:bg-gray-700/50 p-2 rounded">
-                                  <span className="font-semibold text-gray-700 dark:text-gray-300">Jawaban: </span>
-                                  <span className="text-gray-600 dark:text-gray-400">{p.jawaban.jawaban}</span>
-                                </div>
-                              )}
-                              {p?.feedback && (
-                                <div className="bg-gray-100 dark:bg-gray-700/50 p-2 rounded">
-                                  <span className="font-semibold text-gray-700 dark:text-gray-300">Feedback: </span>
-                                  <span className="text-gray-600 dark:text-gray-400">{p.feedback}</span>
-                                </div>
-                              )}
+                return (
+                  <div key={item.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-800/50">
+                    <div className="flex justify-between items-start mb-4">
+                      <h4 className="font-bold text-gray-900 dark:text-white">{item.judul_item}</h4>
+                      {isDone ? (
+                        <span className="inline-flex items-center text-xs text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/30 px-2 py-1 rounded-full">
+                          <CheckCircle className="w-3 h-3 mr-1" /> {correct} dari {totalSoal} benar
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-full">
+                          <XCircle className="w-3 h-3 mr-1" /> Belum dikerjakan
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-4">
+                        {item.pertanyaan_feedback && (
+                          <div>
+                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Jawaban Pertanyaan:</p>
+                            <div className="bg-white dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-300">
+                              {p?.jawaban?.jawaban || <span className="italic text-gray-400">Tidak ada jawaban</span>}
                             </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-gray-600 dark:text-gray-400 align-top">
-                          {p?.status_selesai ? `${correct} dari ${totalSoal} benar` : 'Belum dikerjakan'}
-                        </td>
-                        <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white align-top">
-                          {p?.status_selesai ? p.nilai : '-'}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </div>
+                        )}
+                        
+                        {item.wajib_feedback !== false && (
+                          <div>
+                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Feedback Siswa:</p>
+                            <div className="bg-white dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-300">
+                              {p?.feedback || <span className="italic text-gray-400">Tidak ada feedback</span>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Ubah Nilai Manual (0 - 100)
+                        </label>
+                        <div className="flex flex-col space-y-3">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={inputNilai[item.id] || ''}
+                            onChange={(e) => setInputNilai(prev => ({ ...prev, [item.id]: e.target.value }))}
+                            className="w-full md:w-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            placeholder={String(displayNilai)}
+                          />
+                          
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                              Catatan Guru (Opsional)
+                            </label>
+                            <textarea
+                              value={inputCatatan[item.id] || ''}
+                              onChange={(e) => setInputCatatan(prev => ({ ...prev, [item.id]: e.target.value }))}
+                              rows={3}
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"
+                              placeholder="Berikan masukan atau catatan untuk siswa..."
+                            />
+                          </div>
+
+                        </div>
+                        {isDone && (
+                          <p className="mt-2 text-xs text-green-600 dark:text-green-400 flex items-center">
+                            <CheckCircle className="w-3 h-3 mr-1" /> Nilai saat ini: {displayNilai}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -456,14 +547,6 @@ export default function PenilaianDetail() {
                             />
                           </div>
 
-                          <button
-                            onClick={() => handleSaveNilai(item.id, p?.id)}
-                            disabled={saving[item.id] || !p?.id}
-                            className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 w-full md:w-auto"
-                          >
-                            {saving[item.id] ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-                            Simpan Nilai & Catatan
-                          </button>
                         </div>
                         {isGraded && (
                           <p className="mt-2 text-xs text-green-600 dark:text-green-400 flex items-center">
@@ -523,6 +606,23 @@ export default function PenilaianDetail() {
         </div>
 
       </div>
+
+      {/* Global Save Button */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 shadow-lg z-10">
+        <div className="max-w-7xl mx-auto flex justify-end">
+          <button
+            onClick={handleSaveSemuaNilai}
+            disabled={isSavingAll}
+            className="flex items-center justify-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 w-full md:w-auto font-medium shadow-sm"
+          >
+            {isSavingAll ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
+            Simpan Semua Perubahan Nilai
+          </button>
+        </div>
+      </div>
+      
+      {/* Spacer to prevent content from being hidden behind the fixed button */}
+      <div className="h-24"></div>
     </motion.div>
   );
 }

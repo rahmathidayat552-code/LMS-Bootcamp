@@ -66,7 +66,7 @@ export function calculateGrade(
       } else {
         // Completed
         if (['MATERI', 'PDF', 'YOUTUBE'].includes(item.tipe_item)) {
-          itemScore = 100; // K1 fallback: 100 for completion
+          itemScore = typeof progress.nilai === 'number' ? progress.nilai : 100;
         } else if (item.tipe_item === 'KUIS') {
           itemScore = typeof progress.nilai === 'number' ? progress.nilai : 0;
         } else if (item.tipe_item === 'TUGAS') {
