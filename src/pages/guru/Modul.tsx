@@ -3,10 +3,12 @@ import { collection, query, where, getDocs, deleteDoc, doc, orderBy, writeBatch,
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen, Plus, Edit, Trash2, Eye, Users, Copy, X, Loader2, CheckCircle, FileText, Activity, Share2, MoreVertical } from 'lucide-react';
+import { BookOpen, Plus, Edit, Trash2, Eye, Users, Copy, X, Loader2, CheckCircle, FileText, Activity, Share2, MoreVertical, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatDate } from '../../utils/dateUtils';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface Modul {
   id: string;
@@ -263,6 +265,118 @@ export default function ModulList() {
     });
   };
 
+  const handleDownloadPdf = async (modul: any) => {
+    try {
+      toast.info('Menyiapkan file PDF...');
+      
+      // Fetch modul items
+      const itemsQuery = query(collection(db, 'modul_items'), where('modul_id', '==', modul.id));
+      const itemsSnapshot = await getDocs(itemsQuery);
+      const items = itemsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      items.sort((a: any, b: any) => a.urutan - b.urutan);
+
+      const doc = new jsPDF();
+      
+      // Title
+      doc.setFontSize(20);
+      doc.text(modul.judul_modul || 'Modul Belajar', 14, 22);
+      
+      doc.setFontSize(12);
+      doc.text(`Mata Pelajaran: ${modul.mata_pelajaran || '-'}`, 14, 32);
+      doc.text(`Dibuat pada: ${modul.created_at ? formatDate(modul.created_at) : '-'}`, 14, 40);
+      
+      // Description
+      let startY = 50;
+      if (modul.deskripsi) {
+        doc.setFontSize(11);
+        const splitDesc = doc.splitTextToSize(modul.deskripsi, 180);
+        doc.text(splitDesc, 14, startY);
+        startY += (splitDesc.length * 6) + 10;
+      }
+
+      // Items
+      items.forEach((item: any, index: number) => {
+        if (startY > 270) {
+          doc.addPage();
+          startY = 20;
+        }
+
+        doc.setFontSize(14);
+        doc.text(`${index + 1}. ${item.judul_item} (${item.tipe_item})`, 14, startY);
+        startY += 8;
+
+        if (item.deskripsi) {
+          doc.setFontSize(10);
+          const splitItemDesc = doc.splitTextToSize(item.deskripsi, 180);
+          doc.text(splitItemDesc, 14, startY);
+          startY += (splitItemDesc.length * 5) + 5;
+        }
+
+        if (item.tipe_item === 'MATERI' || item.tipe_item === 'TUGAS') {
+          // Strip HTML tags from konten
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = item.konten || '';
+          const textContent = tempDiv.textContent || tempDiv.innerText || '';
+          
+          if (textContent.trim()) {
+            doc.setFontSize(10);
+            const splitContent = doc.splitTextToSize(textContent.trim(), 180);
+            
+            // Check if content fits on current page
+            if (startY + (splitContent.length * 5) > 280) {
+              doc.addPage();
+              startY = 20;
+            }
+            
+            doc.text(splitContent, 14, startY);
+            startY += (splitContent.length * 5) + 10;
+          }
+        } else if (item.tipe_item === 'KUIS') {
+          try {
+            const kuisData = JSON.parse(item.konten || '[]');
+            if (Array.isArray(kuisData) && kuisData.length > 0) {
+              const tableData = kuisData.map((q: any, i: number) => [
+                i + 1,
+                q.pertanyaan,
+                q.opsi.join('\n'),
+                q.opsi[q.jawaban_benar]
+              ]);
+
+              autoTable(doc, {
+                startY: startY,
+                head: [['No', 'Pertanyaan', 'Opsi Jawaban', 'Jawaban Benar']],
+                body: tableData,
+                theme: 'grid',
+                styles: { fontSize: 9 },
+                columnStyles: {
+                  0: { cellWidth: 10 },
+                  1: { cellWidth: 60 },
+                  2: { cellWidth: 60 },
+                  3: { cellWidth: 40 }
+                }
+              });
+              startY = (doc as any).lastAutoTable.finalY + 10;
+            }
+          } catch (e) {
+            console.error('Error parsing kuis data', e);
+          }
+        } else if (item.tipe_item === 'YOUTUBE' || item.tipe_item === 'PDF') {
+            doc.setFontSize(10);
+            doc.text(`Link: ${item.konten}`, 14, startY);
+            startY += 10;
+        }
+        
+        startY += 5;
+      });
+
+      doc.save(`Modul_${modul.judul_modul.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`);
+      toast.success('Modul berhasil diunduh');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Gagal mengunduh modul');
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center items-center h-64">Memuat...</div>;
   }
@@ -428,6 +542,17 @@ export default function ModulList() {
                                         <span>Bagikan</span>
                                       </button>
                                     )}
+                                    <button
+                                      onClick={() => {
+                                        handleDownloadPdf(modul);
+                                        setOpenMenuId(null);
+                                        setMenuPosition(null);
+                                      }}
+                                      className="w-full flex items-center px-4 py-2.5 text-sm text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+                                    >
+                                      <Download className="w-4 h-4 mr-3" />
+                                      <span>Download PDF</span>
+                                    </button>
                                     <button
                                       onClick={() => {
                                         navigate(`/guru/modul/${modul.id}/monitoring`);
