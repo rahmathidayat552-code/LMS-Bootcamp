@@ -167,18 +167,16 @@ export function useModulForm(id: string | undefined) {
   };
 
   const handleRemoveItem = (index: number) => {
-    if (window.confirm('Apakah Anda yakin ingin menghapus tahapan ini?')) {
-      const newItems = [...items];
-      newItems.splice(index, 1);
-      newItems.forEach((item, i) => {
-        item.urutan = i + 1;
-      });
-      setItems(newItems);
-      if (currentStepIndex >= newItems.length) {
-        setCurrentStepIndex(Math.max(0, newItems.length - 1));
-      }
-      toast.success('Tahapan berhasil dihapus');
+    const newItems = [...items];
+    newItems.splice(index, 1);
+    newItems.forEach((item, i) => {
+      item.urutan = i + 1;
+    });
+    setItems(newItems);
+    if (currentStepIndex >= newItems.length) {
+      setCurrentStepIndex(Math.max(0, newItems.length - 1));
     }
+    toast.success('Tahapan berhasil dihapus');
   };
 
   const handleItemChange = (index: number, field: keyof ModulItem, value: any) => {

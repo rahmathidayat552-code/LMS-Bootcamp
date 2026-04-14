@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, deleteDoc, doc, orderBy, writeBatch, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, deleteDoc, doc, orderBy, writeBatch, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
@@ -84,7 +84,252 @@ export default function ModulList() {
   };
 
   useEffect(() => {
+    const seedAlgoritmaDasar = async () => {
+      if (!user) return;
+      
+      try {
+        const q = query(collection(db, 'moduls'), where('judul_modul', '==', 'Algoritma Dasar'), where('guru_id', '==', user.uid));
+        const snapshot = await getDocs(q);
+        
+        if (snapshot.empty) {
+          const batch1 = writeBatch(db);
+          
+          // 1. Create Modul
+          const modulRef = doc(collection(db, 'moduls'));
+          batch1.set(modulRef, {
+            guru_id: user.uid,
+            mata_pelajaran: 'Informatika',
+            judul_modul: 'Algoritma Dasar',
+            deskripsi: 'Modul ini membahas konsep dasar algoritma, flowchart, dan pseudocode yang merupakan fondasi penting dalam pemrograman.',
+            tipe_target: 'KELAS',
+            target_kelas_ids: [],
+            is_published: true,
+            created_at: serverTimestamp()
+          });
+          
+          await batch1.commit();
+
+          const batch = writeBatch(db);
+
+          // 2. Create Item 1: Materi 1
+          const item1Ref = doc(collection(db, 'modul_items'));
+          batch.set(item1Ref, {
+            modul_id: modulRef.id,
+            tipe_item: 'MATERI',
+            judul_item: 'Pengenalan Algoritma',
+            deskripsi: 'Memahami apa itu algoritma dan mengapa penting dalam ilmu komputer.',
+            konten: '<p><strong>Algoritma</strong> adalah urutan langkah-langkah logis dan sistematis yang digunakan untuk menyelesaikan suatu masalah. Dalam kehidupan sehari-hari, resep masakan adalah contoh algoritma yang paling mudah dipahami.</p><p>Karakteristik algoritma yang baik:</p><ul><li>Jelas dan tidak ambigu</li><li>Memiliki input dan output</li><li>Memiliki batasan waktu (bisa berhenti)</li><li>Efektif dan efisien</li></ul>',
+            urutan: 1,
+            created_at: serverTimestamp()
+          });
+
+          // 3. Create Item 2: Kuis 1
+          const item2Ref = doc(collection(db, 'modul_items'));
+          const kuis1 = [
+            {
+              pertanyaan: "Apa yang dimaksud dengan algoritma?",
+              opsi_a: "Bahasa pemrograman tingkat tinggi",
+              opsi_b: "Urutan langkah-langkah logis untuk menyelesaikan masalah",
+              opsi_c: "Aplikasi untuk membuat desain grafis",
+              opsi_d: "Perangkat keras komputer",
+              kunci_jawaban: "B",
+              bobot_nilai: 20
+            },
+            {
+              pertanyaan: "Manakah dari berikut ini yang BUKAN merupakan karakteristik algoritma yang baik?",
+              opsi_a: "Jelas dan tidak ambigu",
+              opsi_b: "Memiliki batasan waktu",
+              opsi_c: "Bergantung pada bahasa pemrograman tertentu",
+              opsi_d: "Efektif dan efisien",
+              kunci_jawaban: "C",
+              bobot_nilai: 20
+            },
+            {
+              pertanyaan: "Contoh algoritma dalam kehidupan sehari-hari adalah...",
+              opsi_a: "Menonton televisi",
+              opsi_b: "Tidur siang",
+              opsi_c: "Resep membuat kue",
+              opsi_d: "Mendengarkan musik",
+              kunci_jawaban: "C",
+              bobot_nilai: 20
+            },
+            {
+              pertanyaan: "Sebuah algoritma harus memiliki...",
+              opsi_a: "Input dan Output",
+              opsi_b: "Warna dan Suara",
+              opsi_c: "Keyboard dan Mouse",
+              opsi_d: "Internet dan Wifi",
+              kunci_jawaban: "A",
+              bobot_nilai: 20
+            },
+            {
+              pertanyaan: "Mengapa algoritma penting dalam pemrograman?",
+              opsi_a: "Agar komputer terlihat canggih",
+              opsi_b: "Untuk mempercepat koneksi internet",
+              opsi_c: "Sebagai panduan logis sebelum menulis kode program",
+              opsi_d: "Untuk menghapus virus di komputer",
+              kunci_jawaban: "C",
+              bobot_nilai: 20
+            }
+          ];
+          batch.set(item2Ref, {
+            modul_id: modulRef.id,
+            tipe_item: 'KUIS',
+            judul_item: 'Kuis 1: Konsep Dasar Algoritma',
+            deskripsi: 'Uji pemahamanmu tentang konsep dasar algoritma.',
+            konten: JSON.stringify(kuis1),
+            urutan: 2,
+            created_at: serverTimestamp()
+          });
+
+          // 4. Create Item 3: Materi 2
+          const item3Ref = doc(collection(db, 'modul_items'));
+          batch.set(item3Ref, {
+            modul_id: modulRef.id,
+            tipe_item: 'MATERI',
+            judul_item: 'Penyajian Algoritma: Flowchart & Pseudocode',
+            deskripsi: 'Cara menuliskan dan memvisualisasikan algoritma.',
+            konten: '<p>Algoritma dapat disajikan dalam dua bentuk utama:</p><ol><li><strong>Pseudocode:</strong> Penulisan algoritma yang menyerupai bahasa pemrograman namun lebih mudah dibaca manusia. Tidak memiliki aturan sintaks yang baku.</li><li><strong>Flowchart:</strong> Representasi visual dari algoritma menggunakan simbol-simbol grafis (seperti oval untuk mulai/selesai, persegi panjang untuk proses, dan belah ketupat untuk keputusan).</li></ol><p>Kedua metode ini membantu programmer merancang alur logika sebelum mulai menulis kode (coding).</p>',
+            urutan: 3,
+            created_at: serverTimestamp()
+          });
+
+          // 5. Create Item 4: Kuis 2
+          const item4Ref = doc(collection(db, 'modul_items'));
+          const kuis2 = [
+            {
+              pertanyaan: "Representasi visual dari sebuah algoritma menggunakan simbol-simbol grafis disebut...",
+              opsi_a: "Pseudocode",
+              opsi_b: "Flowchart",
+              opsi_c: "Source Code",
+              opsi_d: "Database",
+              kunci_jawaban: "B",
+              bobot_nilai: 20
+            },
+            {
+              pertanyaan: "Penulisan algoritma yang menyerupai bahasa pemrograman namun lebih mudah dibaca manusia disebut...",
+              opsi_a: "Pseudocode",
+              opsi_b: "Flowchart",
+              opsi_c: "Source Code",
+              opsi_d: "Database",
+              kunci_jawaban: "A",
+              bobot_nilai: 20
+            },
+            {
+              pertanyaan: "Dalam flowchart, simbol belah ketupat (diamond) digunakan untuk...",
+              opsi_a: "Mulai / Selesai",
+              opsi_b: "Proses",
+              opsi_c: "Input / Output",
+              opsi_d: "Keputusan (Decision)",
+              kunci_jawaban: "D",
+              bobot_nilai: 20
+            },
+            {
+              pertanyaan: "Simbol oval dalam flowchart berfungsi untuk menunjukkan...",
+              opsi_a: "Proses perhitungan",
+              opsi_b: "Awal dan akhir program",
+              opsi_c: "Pengambilan keputusan",
+              opsi_d: "Arah aliran program",
+              kunci_jawaban: "B",
+              bobot_nilai: 20
+            },
+            {
+              pertanyaan: "Apa keuntungan utama menggunakan pseudocode sebelum coding?",
+              opsi_a: "Program langsung bisa dijalankan",
+              opsi_b: "Fokus pada logika tanpa terganggu aturan sintaks bahasa pemrograman",
+              opsi_c: "Membuat tampilan aplikasi menjadi lebih menarik",
+              opsi_d: "Menghemat kapasitas memori komputer",
+              kunci_jawaban: "B",
+              bobot_nilai: 20
+            }
+          ];
+          batch.set(item4Ref, {
+            modul_id: modulRef.id,
+            tipe_item: 'KUIS',
+            judul_item: 'Kuis 2: Flowchart & Pseudocode',
+            deskripsi: 'Uji pemahamanmu tentang penyajian algoritma.',
+            konten: JSON.stringify(kuis2),
+            urutan: 4,
+            created_at: serverTimestamp()
+          });
+
+          // 6. Find a student to assign progress
+          const siswaQuery = query(collection(db, 'users'), where('role', '==', 'SISWA'));
+          const siswaSnapshot = await getDocs(siswaQuery);
+          
+          if (!siswaSnapshot.empty) {
+            const siswaId = siswaSnapshot.docs[0].id;
+            
+            // Create progress for Item 1 (Materi)
+            const prog1Ref = doc(collection(db, 'progres_siswa'));
+            batch.set(prog1Ref, {
+              siswa_id: siswaId,
+              modul_item_id: item1Ref.id,
+              modul_id: modulRef.id,
+              status_selesai: true,
+              selesai_pada: serverTimestamp()
+            });
+
+            // Create progress for Item 2 (Kuis 1)
+            const prog2Ref = doc(collection(db, 'progres_siswa'));
+            batch.set(prog2Ref, {
+              siswa_id: siswaId,
+              modul_item_id: item2Ref.id,
+              modul_id: modulRef.id,
+              status_selesai: true,
+              nilai: 80, // Real progress data
+              jawaban: {
+                "0": "B",
+                "1": "C",
+                "2": "C",
+                "3": "A",
+                "4": "A" // wrong answer
+              },
+              selesai_pada: serverTimestamp()
+            });
+            
+            // Create progress for Item 3 (Materi 2)
+            const prog3Ref = doc(collection(db, 'progres_siswa'));
+            batch.set(prog3Ref, {
+              siswa_id: siswaId,
+              modul_item_id: item3Ref.id,
+              modul_id: modulRef.id,
+              status_selesai: true,
+              selesai_pada: serverTimestamp()
+            });
+
+            // Create progress for Item 4 (Kuis 2)
+            const prog4Ref = doc(collection(db, 'progres_siswa'));
+            batch.set(prog4Ref, {
+              siswa_id: siswaId,
+              modul_item_id: item4Ref.id,
+              modul_id: modulRef.id,
+              status_selesai: true,
+              nilai: 100, // Real progress data
+              jawaban: {
+                "0": "B",
+                "1": "A",
+                "2": "D",
+                "3": "B",
+                "4": "B"
+              },
+              selesai_pada: serverTimestamp()
+            });
+          }
+
+          await batch.commit();
+          toast.success('Modul Algoritma Dasar berhasil di-generate beserta data siswa!');
+          
+          // Refresh the list
+          fetchModuls();
+        }
+      } catch (error) {
+        console.error('Error seeding data:', error);
+      }
+    };
+
     fetchModuls();
+    seedAlgoritmaDasar();
   }, [user]);
 
   const handleMenuClick = (e: React.MouseEvent, modulId: string) => {
@@ -313,14 +558,24 @@ export default function ModulList() {
         }
 
         if (item.tipe_item === 'MATERI' || item.tipe_item === 'TUGAS') {
-          // Strip HTML tags from konten
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = item.konten || '';
-          const textContent = tempDiv.textContent || tempDiv.innerText || '';
+          // Improved HTML stripping
+          let htmlContent = item.konten || '';
+          htmlContent = htmlContent.replace(/<\/(p|div|h[1-6]|li)>/gi, '\n');
+          htmlContent = htmlContent.replace(/<br\s*\/?>/gi, '\n');
+          htmlContent = htmlContent.replace(/<li>/gi, '- ');
           
-          if (textContent.trim()) {
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = htmlContent;
+          let textContent = tempDiv.textContent || tempDiv.innerText || '';
+          
+          // Clean up extra newlines and remove non-ASCII characters that break jsPDF
+          textContent = textContent.replace(/\n\s*\n/g, '\n\n');
+          textContent = textContent.replace(/[^\x00-\x7F]/g, ""); // Remove non-ASCII
+          textContent = textContent.trim();
+          
+          if (textContent) {
             doc.setFontSize(10);
-            const splitContent = doc.splitTextToSize(textContent.trim(), 180);
+            const splitContent = doc.splitTextToSize(textContent, 180);
             
             // Check if content fits on current page
             if (startY + (splitContent.length * 5) > 280) {
@@ -335,24 +590,30 @@ export default function ModulList() {
           try {
             const kuisData = JSON.parse(item.konten || '[]');
             if (Array.isArray(kuisData) && kuisData.length > 0) {
-              const tableData = kuisData.map((q: any, i: number) => [
-                i + 1,
-                q.pertanyaan,
-                q.opsi.join('\n'),
-                q.opsi[q.jawaban_benar]
-              ]);
+              const tableData = kuisData.map((q: any, i: number) => {
+                const options = [
+                  `A. ${q.opsi_a || ''}`,
+                  `B. ${q.opsi_b || ''}`,
+                  `C. ${q.opsi_c || ''}`,
+                  `D. ${q.opsi_d || ''}`
+                ].join('\n');
+                return [
+                  i + 1,
+                  q.pertanyaan,
+                  options
+                ];
+              });
 
               autoTable(doc, {
                 startY: startY,
-                head: [['No', 'Pertanyaan', 'Opsi Jawaban', 'Jawaban Benar']],
+                head: [['No', 'Pertanyaan', 'Pilihan Ganda']],
                 body: tableData,
                 theme: 'grid',
-                styles: { fontSize: 9 },
+                styles: { fontSize: 10, cellPadding: 3 },
                 columnStyles: {
-                  0: { cellWidth: 10 },
-                  1: { cellWidth: 60 },
-                  2: { cellWidth: 60 },
-                  3: { cellWidth: 40 }
+                  0: { cellWidth: 10, halign: 'center' },
+                  1: { cellWidth: 80 },
+                  2: { cellWidth: 90 }
                 }
               });
               startY = (doc as any).lastAutoTable.finalY + 10;

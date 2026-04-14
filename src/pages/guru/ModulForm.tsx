@@ -1,6 +1,6 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useParams, useOutletContext } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Save, GripVertical, ArrowUp, ArrowDown, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, GripVertical, ArrowUp, ArrowDown, CheckCircle, ChevronUp } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -70,23 +70,7 @@ function SortableStepItem({ item, index, isActive, onClick, onRemove, onMoveUp, 
         </div>
       </div>
       <div className="flex items-center space-x-1">
-        <div className="flex flex-col mr-2">
-          <button 
-            onClick={onMoveUp} 
-            disabled={isFirst}
-            className={`p-0.5 rounded ${isFirst ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20'}`}
-          >
-            <ArrowUp className="w-3 h-3" />
-          </button>
-          <button 
-            onClick={onMoveDown} 
-            disabled={isLast}
-            className={`p-0.5 rounded ${isLast ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20'}`}
-          >
-            <ArrowDown className="w-3 h-3" />
-          </button>
-        </div>
-        <button onClick={onRemove} className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20">
+        <button onClick={onRemove} className="text-red-500 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title="Hapus Tahapan">
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
@@ -97,6 +81,28 @@ function SortableStepItem({ item, index, isActive, onClick, onRemove, onMoveUp, 
 export default function ModulForm() {
   const { id } = useParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<number | null>(null);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 300) {
+        setShowScrollTop(true);
+      } else {
+        setShowScrollTop(false);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
+  };
   
   const {
     isEditing,
@@ -248,7 +254,7 @@ export default function ModulForm() {
                       onClick={() => setCurrentStepIndex(index)}
                       onRemove={(e) => {
                         e.stopPropagation();
-                        handleRemoveItem(index);
+                        setItemToDelete(index);
                       }}
                       onMoveUp={(e) => {
                         e.stopPropagation();
@@ -396,6 +402,45 @@ export default function ModulForm() {
           </div>
         </div>
       )}
+
+      {itemToDelete !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Hapus Tahapan?</h3>
+            <p className="text-gray-500 dark:text-gray-400 mb-6">
+              Apakah Anda yakin ingin menghapus tahapan ini? Data yang dihapus tidak dapat dikembalikan.
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setItemToDelete(null)}
+                className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => {
+                  handleRemoveItem(itemToDelete);
+                  setItemToDelete(null);
+                }}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+              >
+                Ya, Hapus
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Scroll to Top Button */}
+      <button
+        onClick={scrollToTop}
+        className={`fixed bottom-24 right-6 p-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all duration-300 z-40 ${
+          showScrollTop ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'
+        }`}
+        title="Kembali ke atas"
+      >
+        <ChevronUp className="w-6 h-6" />
+      </button>
     </div>
   );
 }
