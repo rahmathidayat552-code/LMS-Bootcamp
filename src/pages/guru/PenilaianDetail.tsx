@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, getDoc, doc, onSnapshot, updateDoc, serverTimestamp, addDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, Loader2, ExternalLink, Save, CheckCircle, XCircle } from 'lucide-react';
+import { ChevronLeft, Loader2, ExternalLink, Save, CheckCircle, XCircle, ChevronUp } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
 import { calculateGrade } from '../../utils/gradeCalculator';
@@ -19,6 +19,27 @@ export default function PenilaianDetail() {
   const [inputNilai, setInputNilai] = useState<Record<string, string>>({});
   const [inputCatatan, setInputCatatan] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 300) {
+        setShowScrollTop(true);
+      } else {
+        setShowScrollTop(false);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
+  };
 
   useEffect(() => {
     if (!modulId || !siswaId) return;
@@ -664,6 +685,17 @@ export default function PenilaianDetail() {
       
       {/* Spacer to prevent content from being hidden behind the fixed button */}
       <div className="h-24"></div>
+
+      {/* Scroll to Top Button */}
+      <button
+        onClick={scrollToTop}
+        className={`fixed bottom-24 right-6 p-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all duration-300 z-40 ${
+          showScrollTop ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'
+        }`}
+        title="Kembali ke atas"
+      >
+        <ChevronUp className="w-6 h-6" />
+      </button>
     </motion.div>
   );
 }
