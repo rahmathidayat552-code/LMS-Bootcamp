@@ -221,7 +221,6 @@ export function useModulForm(id: string | undefined) {
 
     setLoading(true);
     try {
-      const batch = writeBatch(db);
       const modulRef = isEditing ? doc(db, 'moduls', id) : doc(collection(db, 'moduls'));
       
       const modulData = {
@@ -238,13 +237,18 @@ export function useModulForm(id: string | undefined) {
         updated_at: new Date().toISOString()
       };
 
+      // 1. Save the module first
+      const modulBatch = writeBatch(db);
       if (!isEditing) {
         Object.assign(modulData, { created_at: new Date().toISOString() });
-        batch.set(modulRef, modulData);
+        modulBatch.set(modulRef, modulData);
       } else {
-        batch.update(modulRef, modulData);
+        modulBatch.update(modulRef, modulData);
       }
+      await modulBatch.commit();
 
+      // 2. Then save the items
+      const itemsBatch = writeBatch(db);
       let oldItemIds: string[] = [];
       if (isEditing) {
         const oldItemsQuery = query(collection(db, 'modul_items'), where('modul_id', '==', id));
@@ -272,19 +276,19 @@ export function useModulForm(id: string | undefined) {
 
         if (isNewItem) {
           itemData.created_at = new Date().toISOString();
-          batch.set(itemRef, itemData);
+          itemsBatch.set(itemRef, itemData);
         } else {
-          batch.update(itemRef, itemData);
+          itemsBatch.update(itemRef, itemData);
           oldItemIds = oldItemIds.filter(oldId => oldId !== item.id);
         }
       });
 
       // Delete items that were removed by the user
       oldItemIds.forEach(oldId => {
-        batch.delete(doc(db, 'modul_items', oldId));
+        itemsBatch.delete(doc(db, 'modul_items', oldId));
       });
 
-      await batch.commit();
+      await itemsBatch.commit();
 
       if (publish) {
         setShowPublishSuccess(true);

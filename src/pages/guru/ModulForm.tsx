@@ -80,9 +80,18 @@ function SortableStepItem({ item, index, isActive, onClick, onRemove, onMoveUp, 
 
 export default function ModulForm() {
   const { id } = useParams();
+  const { setIsSidebarOpen } = useOutletContext<{ setIsSidebarOpen?: (val: boolean) => void }>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
+  const [countdown, setCountdown] = useState(3);
+
+  useEffect(() => {
+    // Close sidebar when entering this page
+    if (setIsSidebarOpen) {
+      setIsSidebarOpen(false);
+    }
+  }, [setIsSidebarOpen]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -129,6 +138,22 @@ export default function ModulForm() {
     handleSave,
     navigate
   } = useModulForm(id);
+
+  useEffect(() => {
+    if (showPublishSuccess) {
+      const timer = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            navigate('/guru/modul');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [showPublishSuccess, navigate]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -396,8 +421,8 @@ export default function ModulForm() {
             <p className="text-gray-500 dark:text-gray-400 mb-6">
               Modul Anda sekarang dapat diakses oleh siswa sesuai dengan target yang telah ditentukan.
             </p>
-            <p className="text-sm text-gray-400 dark:text-gray-500">
-              Mengalihkan ke halaman daftar modul...
+            <p className="text-sm font-medium text-blue-600 dark:text-blue-400">
+              Mengalihkan ke halaman daftar modul dalam {countdown} detik...
             </p>
           </div>
         </div>
